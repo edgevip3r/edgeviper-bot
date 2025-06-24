@@ -153,7 +153,7 @@ client.on('interactionCreate', async interaction => {
     if (!user) {
       return interaction.reply({
         content: '❗ Please link your Discord in your account first.',
-        flags: InteractionResponseFlags.Ephemeral
+        flags: InteractionResponseFlags.EPHEMERAL
       });
     }
 
@@ -218,7 +218,7 @@ const defaultOverride =
 
     return interaction.reply({
       content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`,
-      flags: InteractionResponseFlags.Ephemeral
+      flags: InteractionResponseFlags.EPHEMERAL
     });
   }
 });
