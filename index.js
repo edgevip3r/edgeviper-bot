@@ -1,6 +1,5 @@
 // index.js
 require('dotenv').config();
-console.log('⚙️  Flags import:', InteractionResponseFlags);
 const CH_ID = process.env.DISCORD_CHANNEL_ID;
 const cron        = require('node-cron');
 const express     = require('express');
@@ -18,6 +17,7 @@ const {
   InteractionType,
   InteractionResponseFlags
 } = require('discord.js');
+console.log('⚙️  Flags import:', InteractionResponseFlags);
 const { fetchMasterRows, markRowSend } = require('./sheets');
 const userService = require('./services/userService');
 
