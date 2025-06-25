@@ -1,6 +1,6 @@
 // sheets.js
 const { google } = require('googleapis');
-const creds = require('./credentials.json');      // ← make sure you saved your JSON key here
+const creds = require('./credentials.json');      // ← your service account key
 
 let sheetsClient;
 
@@ -16,7 +16,10 @@ async function getSheetsClient() {
   return sheetsClient;
 }
 
-async function fetchMasterRows() {
+/**
+ * Fetch all rows from MasterBets, including header.
+ */
+async function fetchAllMasterRows() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.SHEET_ID,
@@ -25,7 +28,16 @@ async function fetchMasterRows() {
   return res.data.values || [];
 }
 
-module.exports = { fetchMasterRows };
+/**
+ * Fetch only new bets marked "S" for sending.
+ * Returns [headerRow, ...rowsWithSendS]
+ */
+async function fetchNewBets() {
+  const all = await fetchAllMasterRows();
+  const header = all[0] || [];
+  const body   = (all.slice(1) || []).filter(r => r[9] === 'S');
+  return [header, ...body];
+}
 
 /**
  * Marks a given row’s Send-column cell to a new value.
@@ -35,10 +47,8 @@ module.exports = { fetchMasterRows };
 async function markRowSend(rowIndex, newVal) {
   const sheets = await getSheetsClient();
   const sheetName = 'MasterBets';
-  // Column J is the 10th column → "J"
-  const colLetter = 'J';
-  // rowIndex is 0 for header; actual sheet row is rowIndex+1
-  const sheetRow = rowIndex + 1;
+  const colLetter = 'J';  // Send column
+  const sheetRow  = rowIndex + 1;
   await sheets.spreadsheets.values.update({
     spreadsheetId: process.env.SHEET_ID,
     range: `${sheetName}!${colLetter}${sheetRow}`,
@@ -47,4 +57,4 @@ async function markRowSend(rowIndex, newVal) {
   });
 }
 
-module.exports = { fetchMasterRows, markRowSend };
+module.exports = { fetchAllMasterRows, fetchNewBets, markRowSend };
