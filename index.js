@@ -1,9 +1,8 @@
-// index.js
 require('dotenv').config();
-const CH_ID    = process.env.DISCORD_CHANNEL_ID;
-const cron     = require('node-cron');
-const express  = require('express');
-const bodyParser = require('body-parser');
+const CH_ID       = process.env.DISCORD_CHANNEL_ID;
+const cron        = require('node-cron');
+const express     = require('express');
+const bodyParser  = require('body-parser');
 const {
   Client,
   GatewayIntentBits,
@@ -22,11 +21,32 @@ const { fetchAllMasterRows, fetchNewBets, markRowSend } = require('./sheets');
 // DB-backed user stakes
 const userService = require('./services/userService');
 
-// Express for MemberPress role sync
-const app        = express();
+// Express for MemberPress role sync + user-stakes endpoint
+const app         = express();
 const WEBHOOK_KEY = process.env.BOT_WEBHOOK_KEY;
 app.use(bodyParser.json());
 
+// New: expose user-stakes endpoint
+app.get('/api/user-stakes', async (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const token      = authHeader.replace(/^Bearer\s+/, '');
+  if (token !== WEBHOOK_KEY) {
+    return res.status(401).send('Unauthorized');
+  }
+  const { discord_id } = req.query;
+  if (!discord_id) {
+    return res.status(400).send('Missing discord_id');
+  }
+  try {
+    const stakes = await userService.listUserStakes(discord_id);
+    return res.json(stakes);
+  } catch (err) {
+    console.error('⚠️ Error fetching user stakes:', err);
+    return res.status(500).send('Server error');
+  }
+});
+
+// Existing role sync
 app.post('/discord-role', async (req, res) => {
   const authHeader = req.headers.authorization || '';
   const token      = authHeader.replace(/^Bearer\s+/, '');
@@ -48,7 +68,7 @@ app.post('/discord-role', async (req, res) => {
   }
 });
 
-// Discord bot
+// Discord bot initialization
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -60,13 +80,10 @@ const client = new Client({
 // Post new bets and mark them
 async function processNewBets() {
   try {
-    // fetch every row so our index matches the sheet row number
     const allRows = await fetchAllMasterRows();
     for (let i = 1; i < allRows.length; i++) {
       const row = allRows[i];
-      // only post rows marked "S" in column J
       if (row[9] === 'S') {
-        // unpack row data
         const [ date, bookie, sport, event, bet, settleDate ] = row;
         const odds        = parseFloat(row[6]);
         const fairOdds    = parseFloat(row[7]);
@@ -76,7 +93,6 @@ async function processNewBets() {
           ? ((odds / fairOdds) * 100).toFixed(2) + '%'
           : 'N/A';
 
-        // build the embed
         const embed = new EmbedBuilder()
           .setColor('#2E7D32')
           .setTitle('💰 New Value Bet 💰')
@@ -92,7 +108,6 @@ async function processNewBets() {
           .setTimestamp()
           .setFooter({ text: `Bet ID: ${betId}` });
 
-        // attach the Get/Edit Stake button
         const actionRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`stakeModal_${betId}`)
@@ -100,11 +115,8 @@ async function processNewBets() {
             .setStyle(ButtonStyle.Primary)
         );
 
-        // send it
         const channel = await client.channels.fetch(CH_ID);
         await channel.send({ embeds: [embed], components: [actionRow] });
-
-        // then mark that exact sheet row as posted
         await markRowSend(i, 'P');
       }
     }
@@ -113,42 +125,39 @@ async function processNewBets() {
   }
 }
 
-// Interaction handler
+// Interaction handler (modals/buttons)
 client.on('interactionCreate', async interaction => {
-  // Button click: show modal
   if (interaction.isButton() && interaction.customId.startsWith('stakeModal_')) {
-    const betId = interaction.customId.split('_')[1];
+    const betId     = interaction.customId.split('_')[1];
     const discordId = interaction.user.id;
-    const user = await userService.findByDiscordId(discordId);
+    const user      = await userService.findByDiscordId(discordId);
     if (!user) {
       return interaction.reply({ content:'❗ Please link your Discord in your account first.', flags:64 });
     }
-    // lookup the bet row by ID
-    const all = await fetchAllMasterRows();
-    const header = all[0] || [];
-    const idxId   = header.indexOf('Bet ID');
-    const idxOdds = header.indexOf('Odds');
-    const idxProb = header.indexOf('Probability');
-    const row     = all.slice(1).find(r => r[idxId]?.toString() === betId);
+    const all       = await fetchAllMasterRows();
+    const header    = all[0] || [];
+    const idxId     = header.indexOf('Bet ID');
+    const idxOdds   = header.indexOf('Odds');
+    const idxProb   = header.indexOf('Probability');
+    const row       = all.slice(1).find(r => r[idxId]?.toString() === betId);
     if (!row) {
       return interaction.reply({ content:'❌ Bet not found.', flags:64 });
     }
-    const odds = parseFloat(row[idxOdds]);
-    let prob = parseFloat(row[idxProb]); if (prob > 1) prob /= 100;
+    const odds      = parseFloat(row[idxOdds]);
+    let   prob      = parseFloat(row[idxProb]); if (prob > 1) prob /= 100;
     let recommended;
     if (user.staking_mode === 'flat') recommended = user.flat_amount;
     else {
-      const pct = Math.min(user.kelly_pct,100)/100;
-      recommended = Math.floor(((odds*prob-1)/(odds-1))*user.bankroll*pct);
+      const pct     = Math.min(user.kelly_pct,100)/100;
+      recommended   = Math.floor(((odds*prob-1)/(odds-1))*user.bankroll*pct);
     }
     const previous = await userService.getUserBetStake(discordId, betId);
-// parseFloat handles the fact that PG returns numbers as strings
-const prevNum = previous != null && !isNaN(previous)
-  ? parseFloat(previous)
-  : null;
-const defaultOverride = prevNum != null
-  ? prevNum.toFixed(2)
-  : '';
+    const prevNum  = previous != null && !isNaN(previous)
+      ? parseFloat(previous)
+      : null;
+    const defaultOverride = prevNum != null
+      ? prevNum.toFixed(2)
+      : '';
     const modal = new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
       .setTitle('Your Stake Calculator')
@@ -172,13 +181,12 @@ const defaultOverride = prevNum != null
       );
     return interaction.showModal(modal);
   }
-  // Modal submit: save
   if (interaction.type===InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
-    const betId = interaction.customId.split('_')[1];
+    const betId     = interaction.customId.split('_')[1];
     const discordId = interaction.user.id;
-    const recStr = interaction.fields.getTextInputValue('recommended');
-    const overStr= interaction.fields.getTextInputValue('override');
-    const finalStake = parseFloat(overStr) || parseFloat(recStr);
+    const recStr    = interaction.fields.getTextInputValue('recommended');
+    const overStr   = interaction.fields.getTextInputValue('override');
+    const finalStake= parseFloat(overStr) || parseFloat(recStr);
     await userService.saveUserBetStake(discordId, betId, finalStake);
     return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
   }
@@ -186,12 +194,7 @@ const defaultOverride = prevNum != null
 
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  // initial run
   await processNewBets();
-
-  // then every minute on the minute (5-field cron)—
-  // this won’t trigger again until the next minute mark,
-  // so it won’t collide with our initial run.
   cron.schedule('* * * * *', () => {
     console.log('⏱️ Checking for new bets…');
     processNewBets();
