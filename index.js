@@ -14,8 +14,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  InteractionType,
-  InteractionResponseFlags
+  InteractionType
 } = require('discord.js');
 console.log('⚙️  Flags import:', InteractionResponseFlags);
 const { fetchMasterRows, markRowSend } = require('./sheets');
@@ -154,7 +153,7 @@ client.on('interactionCreate', async interaction => {
     if (!user) {
       return interaction.reply({
         content: '❗ Please link your Discord in your account first.',
-        flags: InteractionResponseFlags.EPHEMERAL
+        flags: 64
       });
     }
 
@@ -219,7 +218,7 @@ const defaultOverride =
 
     return interaction.reply({
       content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`,
-      flags: InteractionResponseFlags.EPHEMERAL
+      flags: 64
     });
   }
 });
