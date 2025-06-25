@@ -131,7 +131,6 @@ client.on('interactionCreate', async interaction => {
       recommended = Math.floor(((odds*prob-1)/(odds-1))*user.bankroll*pct);
     }
     const previous = await userService.getUserBetStake(discordId, betId);
-const previous = await userService.getUserBetStake(discordId, betId);
 // parseFloat handles the fact that PG returns numbers as strings
 const prevNum = previous != null && !isNaN(previous)
   ? parseFloat(previous)
