@@ -184,11 +184,15 @@ const defaultOverride = prevNum != null
   }
 });
 
-// Ready & cron
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+  // initial run
   await processNewBets();
-  cron.schedule('0 * * * * *', () => {
+
+  // then every minute on the minute (5-field cron)—
+  // this won’t trigger again until the next minute mark,
+  // so it won’t collide with our initial run.
+  cron.schedule('* * * * *', () => {
     console.log('⏱️ Checking for new bets…');
     processNewBets();
   });
