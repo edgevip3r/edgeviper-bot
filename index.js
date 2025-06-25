@@ -16,7 +16,6 @@ const {
   ButtonStyle,
   InteractionType
 } = require('discord.js');
-console.log('⚙️  Flags import:', InteractionResponseFlags);
 const { fetchMasterRows, markRowSend } = require('./sheets');
 const userService = require('./services/userService');
 
