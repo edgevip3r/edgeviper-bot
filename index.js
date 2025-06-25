@@ -20,6 +20,7 @@ const {
 const { fetchAllMasterRows, fetchNewBets, markRowSend } = require('./sheets');
 // DB-backed user stakes
 const userService = require('./services/userService');
+console.log('[api] userService keys:', Object.keys(userService));
 
 // Express for MemberPress role sync + user-stakes endpoint
 const app         = express();
