@@ -1,5 +1,6 @@
 // index.js
 require('dotenv').config();
+console.log('⚙️  Flags import:', InteractionResponseFlags);
 const CH_ID = process.env.DISCORD_CHANNEL_ID;
 const cron        = require('node-cron');
 const express     = require('express');
