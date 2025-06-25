@@ -30,19 +30,25 @@ app.use(bodyParser.json());
 app.get('/api/user-stakes', async (req, res) => {
   const authHeader = req.headers.authorization || '';
   const token      = authHeader.replace(/^Bearer\s+/, '');
-  if (token !== WEBHOOK_KEY) {
-    return res.status(401).send('Unauthorized');
+  console.log(`[api] token="${token}", discord_id="${req.query.discord_id}"`);
+
+  if (token !== process.env.BOT_WEBHOOK_KEY) {
+    console.error('[api] Unauthorized key');
+    return res.status(401).json({ error: 'Unauthorized' });
   }
   const { discord_id } = req.query;
   if (!discord_id) {
-    return res.status(400).send('Missing discord_id');
+    console.error('[api] Missing discord_id');
+    return res.status(400).json({ error: 'Missing discord_id' });
   }
+
   try {
     const stakes = await userService.listUserStakes(discord_id);
+    console.log('[api] returning stakes:', stakes);
     return res.json(stakes);
   } catch (err) {
-    console.error('⚠️ Error fetching user stakes:', err);
-    return res.status(500).send('Server error');
+    console.error('[api] Error fetching stakes:', err.stack || err);
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 
