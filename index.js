@@ -168,17 +168,18 @@ client.on('interactionCreate', async interaction => {
 });
 
 // Ready & cron
-client.once('ready', async ()=>{
+client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   await processNewBets();
-  cron.schedule('0 * * * * *', ()=>{
+  cron.schedule('0 * * * * *', () => {
     console.log('⏱️ Checking for new bets…');
     processNewBets();
   });
 });
 
 client.login(process.env.DISCORD_TOKEN)
-  .catch(err=>console.error('❌ Discord login failed:', err));
+  .catch(err => console.error('❌ Discord login failed:', err));
 
 // Start Express listener
-app.listen(PORT, ()=>console.log(`🔔 Webhook listener on port ${PORT}`));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🔔 Webhook listener on port ${PORT}`));
