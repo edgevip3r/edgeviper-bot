@@ -60,42 +60,53 @@ const client = new Client({
 // Post new bets and mark them
 async function processNewBets() {
   try {
-    const rows = await fetchNewBets();
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      // unpack
-      const [ date, bookie, sport, event, bet, settleDate ] = row;
-      const odds        = parseFloat(row[6]);
-      const fairOdds    = parseFloat(row[7]);
-      const probability = row[20];
-      const betId       = row[22] || `row${i}`;
-      const valuePct = fairOdds > 0 ? ((odds / fairOdds)*100).toFixed(2)+'%' : 'N/A';
+    // fetch every row so our index matches the sheet row number
+    const allRows = await fetchAllMasterRows();
+    for (let i = 1; i < allRows.length; i++) {
+      const row = allRows[i];
+      // only post rows marked "S" in column J
+      if (row[9] === 'S') {
+        // unpack row data
+        const [ date, bookie, sport, event, bet, settleDate ] = row;
+        const odds        = parseFloat(row[6]);
+        const fairOdds    = parseFloat(row[7]);
+        const probability = row[20];
+        const betId       = row[22] || `row${i}`;
+        const valuePct    = fairOdds > 0
+          ? ((odds / fairOdds) * 100).toFixed(2) + '%'
+          : 'N/A';
 
-      const embed = new EmbedBuilder()
-        .setColor('#2E7D32')
-        .setTitle('💰 New Value Bet 💰')
-        .setDescription(`**${sport}** — ${event}`)
-        .addFields(
-          { name:'Bookie', value:bookie, inline:true },
-          { name:'Odds',   value:odds.toString(), inline:true },
-          { name:'Probability', value:probability, inline:true },
-          { name:'Bet',    value:bet },
-          { name:'Settles', value:settleDate, inline:true },
-          { name:'Value %', value:valuePct, inline:true }
-        )
-        .setTimestamp()
-        .setFooter({ text:`Bet ID: ${betId}` });
+        // build the embed
+        const embed = new EmbedBuilder()
+          .setColor('#2E7D32')
+          .setTitle('💰 New Value Bet 💰')
+          .setDescription(`**${sport}** — ${event}`)
+          .addFields(
+            { name: 'Bookie',      value: bookie,         inline: true },
+            { name: 'Odds',        value: odds.toString(), inline: true },
+            { name: 'Probability', value: probability,     inline: true },
+            { name: 'Bet',         value: bet               },
+            { name: 'Settles',     value: settleDate,      inline: true },
+            { name: 'Value %',     value: valuePct,        inline: true }
+          )
+          .setTimestamp()
+          .setFooter({ text: `Bet ID: ${betId}` });
 
-      const actionRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`stakeModal_${betId}`)
-          .setLabel('Get / Edit Stake')
-          .setStyle(ButtonStyle.Primary)
-      );
+        // attach the Get/Edit Stake button
+        const actionRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`stakeModal_${betId}`)
+            .setLabel('Get / Edit Stake')
+            .setStyle(ButtonStyle.Primary)
+        );
 
-      const channel = await client.channels.fetch(CH_ID);
-      await channel.send({ embeds:[embed], components:[actionRow] });
-      await markRowSend(i, 'P');
+        // send it
+        const channel = await client.channels.fetch(CH_ID);
+        await channel.send({ embeds: [embed], components: [actionRow] });
+
+        // then mark that exact sheet row as posted
+        await markRowSend(i, 'P');
+      }
     }
   } catch (err) {
     console.error('❌ Error in processNewBets():', err);
