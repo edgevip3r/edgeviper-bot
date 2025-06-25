@@ -1,8 +1,8 @@
 // services/userService.js
 const { fetch } = require('undici');
-const BASE       = process.env.WP_API_BASE || 'https://edgeviper.co.uk';
-const APP_PASS   = process.env.WP_APP_PASS;
-const db         = require('../db');  // Postgres pool
+const BASE     = process.env.WP_API_BASE || 'https://edgeviper.co.uk';
+const APP_PASS = process.env.WP_APP_PASS;
+const db       = require('../db');  // Postgres pool
 
 module.exports = {
   /**
@@ -47,5 +47,18 @@ module.exports = {
       [discordId, betId, stake]
     );
     console.log('💾 [DB] save complete');
+  },
+
+  /**
+   * List all stakes for a given Discord ID
+   */
+  async listUserStakes(discordId) {
+    console.log(`🔍 [DB] listUserStakes for ${discordId}`);
+    const res = await db.query(
+      `SELECT bet_id, stake FROM user_stakes WHERE discord_id = $1`,
+      [discordId]
+    );
+    console.log('🔍 [DB] stakes rows:', res.rows);
+    return res.rows;
   }
 };
