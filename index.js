@@ -20,40 +20,32 @@ const {
 const { fetchAllMasterRows, fetchNewBets, markRowSend } = require('./sheets');
 // DB-backed user stakes
 const userService = require('./services/userService');
-console.log('[api] userService keys:', Object.keys(userService));
 
-// Express for MemberPress role sync + user-stakes endpoint
+// Express for REST endpoints
 const app         = express();
 const WEBHOOK_KEY = process.env.BOT_WEBHOOK_KEY;
 app.use(bodyParser.json());
 
-// New: expose user-stakes endpoint
+// Expose user-stakes endpoint
 app.get('/api/user-stakes', async (req, res) => {
   const authHeader = req.headers.authorization || '';
   const token      = authHeader.replace(/^Bearer\s+/, '');
-  console.log(`[api] token="${token}", discord_id="${req.query.discord_id}"`);
-
-  if (token !== process.env.BOT_WEBHOOK_KEY) {
-    console.error('[api] Unauthorized key');
+  if (token !== WEBHOOK_KEY) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const { discord_id } = req.query;
   if (!discord_id) {
-    console.error('[api] Missing discord_id');
     return res.status(400).json({ error: 'Missing discord_id' });
   }
-
   try {
     const stakes = await userService.listUserStakes(discord_id);
-    console.log('[api] returning stakes:', stakes);
     return res.json(stakes);
   } catch (err) {
-    console.error('[api] Error fetching stakes:', err.stack || err);
     return res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Existing role sync
+// Role sync endpoint (unchanged)
 app.post('/discord-role', async (req, res) => {
   const authHeader = req.headers.authorization || '';
   const token      = authHeader.replace(/^Bearer\s+/, '');
@@ -70,12 +62,11 @@ app.post('/discord-role', async (req, res) => {
     else return res.status(400).send('Invalid action');
     return res.status(200).send('OK');
   } catch (err) {
-    console.error('Discord role sync error:', err);
     return res.status(500).send('Server error');
   }
 });
 
-// Discord bot initialization
+// Discord bot
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -94,7 +85,7 @@ async function processNewBets() {
         const [ date, bookie, sport, event, bet, settleDate ] = row;
         const odds        = parseFloat(row[6]);
         const fairOdds    = parseFloat(row[7]);
-        const probability = row[20];
+        const probability = parseFloat(row[20]);
         const betId       = row[22] || `row${i}`;
         const valuePct    = fairOdds > 0
           ? ((odds / fairOdds) * 100).toFixed(2) + '%'
@@ -107,7 +98,7 @@ async function processNewBets() {
           .addFields(
             { name: 'Bookie',      value: bookie,         inline: true },
             { name: 'Odds',        value: odds.toString(), inline: true },
-            { name: 'Probability', value: probability,     inline: true },
+            { name: 'Probability', value: (probability>1?probability/100:probability).toString(),inline:true },
             { name: 'Bet',         value: bet               },
             { name: 'Settles',     value: settleDate,      inline: true },
             { name: 'Value %',     value: valuePct,        inline: true }
@@ -128,7 +119,7 @@ async function processNewBets() {
       }
     }
   } catch (err) {
-    console.error('❌ Error in processNewBets():', err);
+    console.error(err);
   }
 }
 
@@ -139,32 +130,39 @@ client.on('interactionCreate', async interaction => {
     const discordId = interaction.user.id;
     const user      = await userService.findByDiscordId(discordId);
     if (!user) {
-      return interaction.reply({ content:'❗ Please link your Discord in your account first.', flags:64 });
+      return interaction.reply({ content:'❗ Please link Discord first.', flags:64 });
     }
     const all       = await fetchAllMasterRows();
     const header    = all[0] || [];
     const idxId     = header.indexOf('Bet ID');
     const idxOdds   = header.indexOf('Odds');
     const idxProb   = header.indexOf('Probability');
-    const row       = all.slice(1).find(r => r[idxId]?.toString() === betId);
+    const row       = all.slice(1).find(r => r[idxId]?.toString()===betId);
     if (!row) {
       return interaction.reply({ content:'❌ Bet not found.', flags:64 });
     }
     const odds      = parseFloat(row[idxOdds]);
-    let   prob      = parseFloat(row[idxProb]); if (prob > 1) prob /= 100;
+    let   prob      = parseFloat(row[idxProb]); if (prob>1) prob/=100;
     let recommended;
-    if (user.staking_mode === 'flat') recommended = user.flat_amount;
-    else {
-      const pct     = Math.min(user.kelly_pct,100)/100;
-      recommended   = Math.floor(((odds*prob-1)/(odds-1))*user.bankroll*pct);
+
+    if (user.staking_mode==='flat') {
+      recommended = user.flat_amount;
+    } else if (user.staking_mode==='stw') {
+      // Stake to Win logic
+      const raw   = user.stw_amount/(odds-1) || 0;
+      let   stake = Math.round(raw);
+      if (stake*(odds-1)<user.stw_amount) stake += 1;
+      recommended = stake;
+    } else {
+      // Kelly staking
+      const pct = Math.min(user.kelly_pct,100)/100;
+      recommended = Math.floor(((odds*prob-1)/(odds-1))*user.bankroll*pct);
     }
+
     const previous = await userService.getUserBetStake(discordId, betId);
-    const prevNum  = previous != null && !isNaN(previous)
-      ? parseFloat(previous)
-      : null;
-    const defaultOverride = prevNum != null
-      ? prevNum.toFixed(2)
-      : '';
+    const prevNum  = (previous!=null && !isNaN(previous)) ? parseFloat(previous):null;
+    const defaultOverride = prevNum!=null ? prevNum.toFixed(2):'';
+
     const modal = new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
       .setTitle('Your Stake Calculator')
@@ -188,12 +186,13 @@ client.on('interactionCreate', async interaction => {
       );
     return interaction.showModal(modal);
   }
+
   if (interaction.type===InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
     const betId     = interaction.customId.split('_')[1];
     const discordId = interaction.user.id;
     const recStr    = interaction.fields.getTextInputValue('recommended');
     const overStr   = interaction.fields.getTextInputValue('override');
-    const finalStake= parseFloat(overStr) || parseFloat(recStr);
+    const finalStake= parseFloat(overStr)||parseFloat(recStr);
     await userService.saveUserBetStake(discordId, betId, finalStake);
     return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
   }
@@ -202,15 +201,11 @@ client.on('interactionCreate', async interaction => {
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   await processNewBets();
-  cron.schedule('* * * * *', () => {
-    console.log('⏱️ Checking for new bets…');
-    processNewBets();
-  });
+  cron.schedule('* * * * *', () => processNewBets());
 });
 
-client.login(process.env.DISCORD_TOKEN)
-  .catch(err => console.error('❌ Discord login failed:', err));
+client.login(process.env.DISCORD_TOKEN).catch(err=>console.error(err));
 
 // Start Express listener
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🔔 Webhook listener on port ${PORT}`));
+const PORT = process.env.PORT||3000;
+app.listen(PORT,()=>console.log(`🔔 Webhook listener on port ${PORT}`));
