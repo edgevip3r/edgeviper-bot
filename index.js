@@ -83,11 +83,13 @@ async function processNewBets() {
       const row = allRows[i];
       if (row[9] === 'S') {
         const [ date, bookie, sport, event, bet, settleDate ] = row;
-        const odds        = parseFloat(row[6]);
-        const fairOdds    = parseFloat(row[7]);
-        const probability = parseFloat(row[20]);
-        const betId       = row[22] || `row${i}`;
-        const valuePct    = fairOdds > 0
+        const odds     = parseFloat(row[6]) || 0;
+        const fairOdds = parseFloat(row[7]) || 0;
+        let   probNum  = parseFloat(row[20]) || 0;
+        if (probNum > 1) probNum /= 100;
+        const probabilityPct = (probNum * 100).toFixed(2) + '%';
+        const betId    = row[22] || `row${i}`;
+        const valuePct = fairOdds > 0
           ? ((odds / fairOdds) * 100).toFixed(2) + '%'
           : 'N/A';
 
@@ -96,12 +98,12 @@ async function processNewBets() {
           .setTitle('💰 New Value Bet 💰')
           .setDescription(`**${sport}** — ${event}`)
           .addFields(
-            { name: 'Bookie',      value: bookie,         inline: true },
-            { name: 'Odds',        value: odds.toString(), inline: true },
-            { name: 'Probability', value: (probability>1?probability/100:probability).toString(),inline:true },
-            { name: 'Bet',         value: bet               },
-            { name: 'Settles',     value: settleDate,      inline: true },
-            { name: 'Value %',     value: valuePct,        inline: true }
+            { name: 'Bookie',      value: bookie,           inline: true },
+            { name: 'Odds',        value: odds.toString(),   inline: true },
+            { name: 'Probability', value: probabilityPct,    inline: true },
+            { name: 'Bet',         value: bet,               inline: false },
+            { name: 'Settles',     value: settleDate,        inline: true },
+            { name: 'Value %',     value: valuePct,          inline: true }
           )
           .setTimestamp()
           .setFooter({ text: `Bet ID: ${betId}` });
@@ -137,31 +139,31 @@ client.on('interactionCreate', async interaction => {
     const idxId     = header.indexOf('Bet ID');
     const idxOdds   = header.indexOf('Odds');
     const idxProb   = header.indexOf('Probability');
-    const row       = all.slice(1).find(r => r[idxId]?.toString()===betId);
+    const row       = all.slice(1).find(r => r[idxId]?.toString() === betId);
     if (!row) {
       return interaction.reply({ content:'❌ Bet not found.', flags:64 });
     }
-    const odds      = parseFloat(row[idxOdds]);
-    let   prob      = parseFloat(row[idxProb]); if (prob>1) prob/=100;
-    let recommended;
+    const odds     = parseFloat(row[idxOdds]) || 0;
+    let   prob     = parseFloat(row[idxProb]) || 0; if (prob > 1) prob /= 100;
+    let   recommended;
 
-    if (user.staking_mode==='flat') {
+    if (user.staking_mode === 'flat') {
       recommended = user.flat_amount;
-    } else if (user.staking_mode==='stw') {
+    } else if (user.staking_mode === 'stw') {
       // Stake to Win logic
-      const raw   = user.stw_amount/(odds-1) || 0;
+      const raw   = user.stw_amount / (odds - 1) || 0;
       let   stake = Math.round(raw);
-      if (stake*(odds-1)<user.stw_amount) stake += 1;
+      if (stake * (odds - 1) < user.stw_amount) stake += 1;
       recommended = stake;
     } else {
       // Kelly staking
-      const pct = Math.min(user.kelly_pct,100)/100;
-      recommended = Math.floor(((odds*prob-1)/(odds-1))*user.bankroll*pct);
+      const pct = Math.min(user.kelly_pct, 100) / 100;
+      recommended = Math.floor(((odds * prob - 1) / (odds - 1)) * user.bankroll * pct);
     }
 
     const previous = await userService.getUserBetStake(discordId, betId);
-    const prevNum  = (previous!=null && !isNaN(previous)) ? parseFloat(previous):null;
-    const defaultOverride = prevNum!=null ? prevNum.toFixed(2):'';
+    const prevNum  = (previous != null && !isNaN(previous)) ? parseFloat(previous) : null;
+    const defaultOverride = prevNum != null ? prevNum.toFixed(2) : '';
 
     const modal = new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
@@ -187,12 +189,12 @@ client.on('interactionCreate', async interaction => {
     return interaction.showModal(modal);
   }
 
-  if (interaction.type===InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
+  if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
     const betId     = interaction.customId.split('_')[1];
     const discordId = interaction.user.id;
     const recStr    = interaction.fields.getTextInputValue('recommended');
     const overStr   = interaction.fields.getTextInputValue('override');
-    const finalStake= parseFloat(overStr)||parseFloat(recStr);
+    const finalStake= parseFloat(overStr) || parseFloat(recStr);
     await userService.saveUserBetStake(discordId, betId, finalStake);
     return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
   }
@@ -204,8 +206,8 @@ client.once('ready', async () => {
   cron.schedule('* * * * *', () => processNewBets());
 });
 
-client.login(process.env.DISCORD_TOKEN).catch(err=>console.error(err));
+client.login(process.env.DISCORD_TOKEN).catch(err => console.error(err));
 
 // Start Express listener
-const PORT = process.env.PORT||3000;
-app.listen(PORT,()=>console.log(`🔔 Webhook listener on port ${PORT}`));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🔔 Webhook listener on port ${PORT}`));
