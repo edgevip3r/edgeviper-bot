@@ -26,10 +26,9 @@ const app         = express();
 const WEBHOOK_KEY = process.env.BOT_WEBHOOK_KEY;
 app.use(bodyParser.json());
 
-// In-memory cache for user settings
+// In-memory cache for user settings and posted bets
 const userSettingsCache = new Map();
-// In-memory set to track bets already posted (to avoid duplicates)
-const postedBetCache = new Set();
+const postedBetCache    = new Set();
 
 /**
  * Endpoint: fetch user stakes (for My Bets page)
@@ -55,11 +54,9 @@ app.post('/discord-role', async (req, res) => {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '');
   if (token !== WEBHOOK_KEY) return res.status(401).send('Unauthorized');
   const { action, discord_id, role_id, guild_id } = req.body;
-  if (!action || !discord_id || !role_id || !guild_id) {
-    return res.status(400).send('Missing fields');
-  }
+  if (!action || !discord_id || !role_id || !guild_id) return res.status(400).send('Missing fields');
   try {
-    const guild = await client.guilds.fetch(guild_id);
+    const guild  = await client.guilds.fetch(guild_id);
     const member = await guild.members.fetch(discord_id);
     if (action === 'add_role') await member.roles.add(role_id);
     else if (action === 'remove_role') await member.roles.remove(role_id);
@@ -165,28 +162,8 @@ async function processNewBets() {
 
       const channel = await client.channels.fetch(CH_ID);
       await channel.send({ embeds: [embed], components: [actionRow] });
-      // mark as posted in cache
       postedBetCache.add(betId);
       await markRowSend(i, 'P');
-    }
-  } catch (err) {
-    console.error('❌ Error in processNewBets():', err);
-  }
-}
-
-        const actionRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`stakeModal_${betId}`)
-            .setLabel('Get / Edit Stake')
-            .setStyle(ButtonStyle.Primary)
-        );
-
-        const channel = await client.channels.fetch(CH_ID);
-        await channel.send({ embeds: [embed], components: [actionRow] });
-        // mark as posted in cache
-        postedBetCache.add(betId);
-        await markRowSend(i, 'P');
-      }
     }
   } catch (err) {
     console.error('❌ Error in processNewBets():', err);
