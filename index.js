@@ -74,8 +74,17 @@ async function enablePreload() {
   }
 }
 
-client.once('ready', async () =>('ready', async () => {
+client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+  await enablePreload();
+  // initial fetch
+  await processNewBets();
+  // schedule every minute
+  cron.schedule('* * * * *', () => {
+    console.log('⏱️ Checking for new bets…');
+    processNewBets();
+  });
+});
   await enablePreload();
   // initial fetch
   await processNewBets();
