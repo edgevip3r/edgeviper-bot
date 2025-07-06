@@ -1,4 +1,10 @@
 require('dotenv').config();
+
+// Redis client
+const Redis = require('ioredis');
+const redis = new Redis(process.env.REDIS_URL);
+redis.on('error', err => console.error('Redis error:', err));
+
 const CH_ID       = process.env.DISCORD_CHANNEL_ID;
 const cron        = require('node-cron');
 const express     = require('express');
@@ -26,7 +32,7 @@ const app         = express();
 const WEBHOOK_KEY = process.env.BOT_WEBHOOK_KEY;
 app.use(bodyParser.json());
 
-// In-memory cache for user settings and posted bets
+// In-memory cache for quick lookup (backed by Redis)
 const userSettingsCache = new Map();
 const postedBetCache    = new Set();
 
@@ -70,12 +76,18 @@ app.post('/discord-role', async (req, res) => {
 
 /**
  * Webhook: settings updates from WordPress
+ * Persist to DB and update Redis + in-memory cache
  */
 app.post('/settings-updated', async (req, res) => {
   try {
     const { discord_id, staking_mode, bankroll, kelly_pct, flat_stake, stw_amount } = req.body;
-    await userService.saveUserSettings(discord_id, { staking_mode, bankroll, kelly_pct, flat_stake, stw_amount });
-    userSettingsCache.set(discord_id, { staking_mode, bankroll, kelly_pct, flat_stake, stw_amount });
+    const settings = { staking_mode, bankroll, kelly_pct, flat_stake, stw_amount };
+    // 1) Save to Postgres
+    await userService.saveUserSettings(discord_id, settings);
+    // 2) Update Redis hash
+    await redis.hset('user_settings', discord_id, JSON.stringify(settings));
+    // 3) Update in-memory cache
+    userSettingsCache.set(discord_id, settings);
     return res.sendStatus(200);
   } catch (err) {
     console.error('Webhook error:', err);
@@ -84,25 +96,39 @@ app.post('/settings-updated', async (req, res) => {
 });
 
 /**
- * Preload all user settings into cache on startup
+ * Preload all user settings from Redis into in-memory cache
  */
 async function enablePreload() {
   try {
-    const all = await userService.getAllUserSettings();
-    all.forEach(u => userSettingsCache.set(u.discord_id, u));
-    console.log(`🔄 Preloaded ${all.length} user settings`);
+    const all = await redis.hgetall('user_settings');
+    const count = Object.keys(all).length;
+    for (const [id, json] of Object.entries(all)) {
+      userSettingsCache.set(id, JSON.parse(json));
+    }
+    console.log(`🔄 Preloaded ${count} user settings from Redis`);
   } catch (err) {
     console.error('❌ Failed to preload user settings:', err);
   }
 }
 
 /**
- * Lazy-load settings for a single user
+ * Lazy-load settings: check memory, then Redis, then fallback to WordPress REST
  */
 async function getUserSettings(discordId) {
   if (!userSettingsCache.has(discordId)) {
-    const settings = await userService.findByDiscordId(discordId);
-    if (settings) userSettingsCache.set(discordId, settings);
+    // Try Redis
+    const raw = await redis.hget('user_settings', discordId);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      userSettingsCache.set(discordId, parsed);
+    } else {
+      // Fallback to WP
+      const settings = await userService.findByDiscordId(discordId);
+      if (settings) {
+        await redis.hset('user_settings', discordId, JSON.stringify(settings));
+        userSettingsCache.set(discordId, settings);
+      }
+    }
   }
   return userSettingsCache.get(discordId);
 }
@@ -177,7 +203,7 @@ client.on('interactionCreate', async interaction => {
     const discordId = interaction.user.id;
     const startTime = process.hrtime();
 
-    // Load settings and log source
+    // Load settings from cache/Redis/WP
     const user      = await getUserSettings(discordId);
     const fromCache = userSettingsCache.has(discordId);
     console.log(`🔍 [Settings] for ${discordId} loaded from ${fromCache ? 'cache' : 'source'}`);
@@ -207,7 +233,7 @@ client.on('interactionCreate', async interaction => {
     const flatNum      = parseFloat(user.flat_stake) || 0;
     const stwNum       = parseFloat(user.stw_amount) || 0;
     if (user.staking_mode === 'flat')       recommendedNum = flatNum;
-    else if (user.staking_mode === 'stw') { let raw = stwNum/(odds-1)||0; let sk = Math.round(raw); if (sk*(odds-1)<stwNum) sk++; recommendedNum = sk; }
+    else if (user.staking_mode === 'stw') { let raw=stwNum/(odds-1)||0; let sk=Math.round(raw); if(sk*(odds-1)<stwNum) sk++; recommendedNum=sk; }
     else                                    recommendedNum = Math.floor(((odds*p-1)/(odds-1)) * bankrollNum * kellyPctNum);
     const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
 
