@@ -59,12 +59,7 @@ client.on('interactionCreate', async interaction => {
     const discordId = interaction.user.id;
 
     // 1) Fetch user settings from cache or service
-// inside your button handler, before calling showModal()
-const start = process.hrtime.bigint();
     const user = await getUserSettings(discordId);
-// … compute `recommended` …
-const diff = Number(process.hrtime.bigint() - start)/1e6;
-console.log(`Lookup+calc took ${diff.toFixed(2)} ms`);
     if (!user) {
       return interaction.reply({ content:'❗ Please link Discord first.', flags:64 });
     }
