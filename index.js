@@ -61,9 +61,14 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
  * Preload user settings into cache at startup
  */
 async function enablePreload() {
+  if (typeof userService.getAllUserSettings !== 'function') {
+    console.warn('⚠️ userService.getAllUserSettings not defined; skipping preload');
+    return;
+  }
   const all = await userService.getAllUserSettings();
   all.forEach(u => userSettingsCache.set(u.discord_id, u));
   console.log(`🔄 Preloaded ${all.length} user settings`);
+}(`🔄 Preloaded ${all.length} user settings`);
 }
 
 client.once('ready', async () => {
