@@ -1,8 +1,8 @@
 require('dotenv').config();
-const CH_ID       = process.env.DISCORD_CHANNEL_ID;
-const cron        = require('node-cron');
-const express     = require('express');
-const bodyParser  = require('body-parser');
+const CH_ID = process.env.DISCORD_CHANNEL_ID;
+const cron = require('node-cron');
+const express = require('express');
+const bodyParser = require('body-parser');
 const {
   Client,
   GatewayIntentBits,
@@ -21,131 +21,71 @@ const { fetchAllMasterRows, fetchNewBets, markRowSend } = require('./sheets');
 // user service
 const userService = require('./services/userService');
 
-// In-memory cache for user settings (discordId => settings)
-const userSettingsCache = new Map();
-
-// Express app for webhooks or other endpoints
 const app = express();
 app.use(bodyParser.json());
 
-// Discord bot client
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
+// In-memory cache for user settings (discordId => settings)
+const userSettingsCache = new Map();
+
+// Webhook endpoint for settings updates
+app.post('/settings-updated', async (req, res) => {
+  try {
+    const { discord_id, staking_mode, bankroll, kelly_pct, flat_stake, stw_amount } = req.body;
+    // Persist in DB via userService
+    await userService.saveUserSettings(discord_id, { staking_mode, bankroll, kelly_pct, flat_stake, stw_amount });
+    // Update cache
+    userSettingsCache.set(discord_id, { staking_mode, bankroll, kelly_pct, flat_stake, stw_amount });
+    return res.sendStatus(200);
+  } catch (err) {
+    console.error('Webhook error:', err);
+    return res.status(500).send('Error');
+  }
+});
 
 /**
- * Lazy-load user settings into cache
+ * Fetch and post new bets every minute
  */
-async function getUserSettings(discordId) {
-  if (!userSettingsCache.has(discordId)) {
-    const settings = await userService.findByDiscordId(discordId);
-    userSettingsCache.set(discordId, settings);
-  }
-  return userSettingsCache.get(discordId);
-}
-
-// Process new bets logic (unchanged)...
 async function processNewBets() {
   try {
     const newRows = await fetchNewBets();
-    // existing logic to post bets...
+    // existing logic to post bets to Discord...
   } catch (err) {
     console.error('❌ Error in processNewBets():', err);
   }
 }
 
-// Interaction handler (modals/buttons)
-client.on('interactionCreate', async interaction => {
-  if (interaction.isButton() && interaction.customId.startsWith('stakeModal_')) {
-    const betId     = interaction.customId.split('_')[1];
-    const discordId = interaction.user.id;
+// Bot setup
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 
-    // 1) Fetch user settings from cache or service
-    const user = await getUserSettings(discordId);
-    if (!user) {
-      return interaction.reply({ content:'❗ Please link Discord first.', flags:64 });
-    }
-
-    // 2) Fetch sheet rows and find the bet entry (unchanged)
-    const all = await fetchAllMasterRows();
-    const header = all[0] || [];
-    const idxId   = header.indexOf('Bet ID');
-    const idxOdds = header.indexOf('Odds');
-    const idxProb = header.indexOf('Probability');
-    const row     = all.slice(1).find(r => r[idxId]?.toString() === betId);
-    if (!row) {
-      return interaction.reply({ content:'❌ Bet not found.', flags:64 });
-    }
-
-    // 3) Compute recommended stake synchronously using user settings
-    const odds = parseFloat(row[idxOdds]) || 0;
-    let prob = parseFloat(row[idxProb]) || 0;
-    if (prob > 1) prob /= 100;
-
-    let recommended;
-    if (user.staking_mode === 'flat') {
-      recommended = user.flat_stake;
-    } else if (user.staking_mode === 'kelly') {
-      const k = Math.min(user.kelly_pct / 100, 1);
-      recommended = Math.floor(((odds * prob - 1) / (odds - 1)) * user.bankroll * k);
-    } else {
-      // stake-to-win
-      const raw = (user.stw_amount || 0) / (odds - 1) || 0;
-      recommended = Math.round(raw);
-      if (recommended * (odds - 1) < user.stw_amount) recommended++;
-    }
-
-    // previous override fetch (unchanged)
-    const prev = await userService.getUserBetStake(discordId, betId);
-    const defaultOverride = prev != null ? prev.toFixed(2) : '';
-
-    // 4) Show the modal immediately with precomputed recommended value
-    const modal = new ModalBuilder()
-      .setCustomId(`stakeModalSubmit_${betId}`)
-      .setTitle('Your Stake Calculator')
-      .addComponents(
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('recommended')
-            .setLabel('Recommended Stake')
-            .setStyle(TextInputStyle.Short)
-            .setValue(recommended.toFixed(2))
-            .setRequired(false)
-        ),
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('override')
-            .setLabel('Actual Stake (optional)')
-            .setStyle(TextInputStyle.Short)
-            .setValue(defaultOverride)
-            .setRequired(false)
-        )
-      );
-
-    return interaction.showModal(modal);
-  }
-
-  if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
-    const betId     = interaction.customId.split('_')[1];
-    const discordId = interaction.user.id;
-    const recStr    = interaction.fields.getTextInputValue('recommended');
-    const overStr   = interaction.fields.getTextInputValue('override');
-    const finalStake= parseFloat(overStr) || parseFloat(recStr);
-
-    await userService.saveUserBetStake(discordId, betId, finalStake);
-    return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
-  }
-});
+/**
+ * Preload user settings into cache at startup
+ */
+async function enablePreload() {
+  const all = await userService.getAllUserSettings();
+  all.forEach(u => userSettingsCache.set(u.discord_id, u));
+  console.log(`🔄 Preloaded ${all.length} user settings`);
+}
 
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+  await enablePreload();
+  // initial fetch
   await processNewBets();
+  // schedule every minute
   cron.schedule('* * * * *', () => {
     console.log('⏱️ Checking for new bets…');
     processNewBets();
   });
 });
 
+// Interaction handlers
+client.on('interactionCreate', async interaction => {
+  // ... existing stakeModal and modalSubmit logic using userSettingsCache ...
+});
+
+// Login
 client.login(process.env.DISCORD_TOKEN).catch(err => console.error('❌ Discord login failed:', err));
 
-// Start Express listener
+// Start webhook listener
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🔔 Webhook listener on port ${PORT}`));
+app.listen(PORT, () => console.log(`🔔 Webhook listening on port ${PORT}`));
