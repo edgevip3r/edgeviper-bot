@@ -176,7 +176,14 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId.startsWith('stakeModal_')) {
     const betId     = interaction.customId.split('_')[1];
     const discordId = interaction.user.id;
+    // timing start
+    const startTime = process.hrtime();
+
+    // load user settings (from cache or REST)
     const user      = await getUserSettings(discordId);
+    const fromCache = userSettingsCache.has(discordId);
+    console.log(`🔍 [Settings] for ${discordId} loaded from ${fromCache ? 'cache' : 'source'}`);
+
     if (!user || !user.staking_mode) {
       return interaction.reply({ content:'❗ Please link Discord first.', flags:64 });
     }
@@ -195,7 +202,7 @@ client.on('interactionCreate', async interaction => {
     let   prob     = parseFloat(row[idxProb]) || 0;
     if (prob > 1) prob /= 100;
 
-        // Calculate recommended stake
+    // Calculate recommended stake
     let recommendedNum = 0;
     const bankrollNum = parseFloat(user.bankroll) || 0;
     const kellyPctNum = Math.min(parseFloat(user.kelly_pct) || 0, 100) / 100;
@@ -212,6 +219,11 @@ client.on('interactionCreate', async interaction => {
       recommendedNum = Math.floor(((odds * prob - 1) / (odds - 1)) * bankrollNum * kellyPctNum);
     }
     const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
+
+    // timing end
+    const diff = process.hrtime(startTime);
+    const ms   = (diff[0] * 1000 + diff[1] / 1e6).toFixed(2);
+    console.log(`⏱️ [Timing] fetch+calc for ${discordId}, bet ${betId}: ${ms} ms`);
 
     // Fetch previous override
     const previous = await userService.getUserBetStake(discordId, betId);
@@ -241,6 +253,10 @@ client.on('interactionCreate', async interaction => {
         )
       );
     return interaction.showModal(modal);
+  }
+
+  // rest of modalSubmit handler unchanged
+});
   }
 
   if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
