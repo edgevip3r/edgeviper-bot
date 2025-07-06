@@ -28,6 +28,8 @@ app.use(bodyParser.json());
 
 // In-memory cache for user settings
 const userSettingsCache = new Map();
+// In-memory set to track bets already posted (to avoid duplicates)
+const postedBetCache = new Set();
 
 /**
  * Endpoint: fetch user stakes (for My Bets page)
@@ -125,7 +127,9 @@ async function processNewBets() {
     const rows = await fetchAllMasterRows();
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
-      if (r[9] === 'S') {
+      const betId = r[22] || `row${i}`;
+      // only process new 'S' rows not already posted
+      if (r[9] !== 'S' || postedBetCache.has(betId)) continue;
         const [ date, bookie, sport, event, betText, settleDate ] = r;
         const odds     = parseFloat(r[6]) || 0;
         const fairOdds = parseFloat(r[7]) || 0;
@@ -161,6 +165,8 @@ async function processNewBets() {
 
         const channel = await client.channels.fetch(CH_ID);
         await channel.send({ embeds: [embed], components: [actionRow] });
+        // mark as posted in cache
+        postedBetCache.add(betId);
         await markRowSend(i, 'P');
       }
     }
