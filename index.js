@@ -130,31 +130,49 @@ async function processNewBets() {
       const betId = r[22] || `row${i}`;
       // only process new 'S' rows not already posted
       if (r[9] !== 'S' || postedBetCache.has(betId)) continue;
-        const [ date, bookie, sport, event, betText, settleDate ] = r;
-        const odds     = parseFloat(r[6]) || 0;
-        const fairOdds = parseFloat(r[7]) || 0;
-        let   probNum  = parseFloat(r[20]) || 0;
-        if (probNum > 1) probNum /= 100;
-        const probability = (probNum * 100).toFixed(2) + '%';
-        const betId    = r[22] || `row${i}`;
-        const valuePct = fairOdds > 0
-          ? ((odds / fairOdds) * 100).toFixed(2) + '%'
-          : 'N/A';
 
-        const embed = new EmbedBuilder()
-          .setColor('#2E7D32')
-          .setTitle('💰 New Value Bet 💰')
-          .setDescription(`**${sport}** — ${event}`)
-          .addFields(
-            { name: 'Bookie',      value: bookie,         inline: true },
-            { name: 'Odds',        value: odds.toString(), inline: true },
-            { name: 'Probability', value: probability,     inline: true },
-            { name: 'Bet',         value: betText,        inline: false },
-            { name: 'Settles',     value: settleDate,     inline: true },
-            { name: 'Value %',     value: valuePct,       inline: true }
-          )
-          .setTimestamp()
-          .setFooter({ text: `Bet ID: ${betId}` });
+      const [ date, bookie, sport, event, betText, settleDate ] = r;
+      const odds     = parseFloat(r[6]) || 0;
+      const fairOdds = parseFloat(r[7]) || 0;
+      let   probNum  = parseFloat(r[20]) || 0;
+      if (probNum > 1) probNum /= 100;
+      const probability = (probNum * 100).toFixed(2) + '%';
+      const valuePct = fairOdds > 0
+        ? ((odds / fairOdds) * 100).toFixed(2) + '%'
+        : 'N/A';
+
+      const embed = new EmbedBuilder()
+        .setColor('#2E7D32')
+        .setTitle('💰 New Value Bet 💰')
+        .setDescription(`**${sport}** — ${event}`)
+        .addFields(
+          { name: 'Bookie',      value: bookie,         inline: true },
+          { name: 'Odds',        value: odds.toString(), inline: true },
+          { name: 'Probability', value: probability,     inline: true },
+          { name: 'Bet',         value: betText,        inline: false },
+          { name: 'Settles',     value: settleDate,     inline: true },
+          { name: 'Value %',     value: valuePct,       inline: true }
+        )
+        .setTimestamp()
+        .setFooter({ text: `Bet ID: ${betId}` });
+
+      const actionRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`stakeModal_${betId}`)
+          .setLabel('Get / Edit Stake')
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      const channel = await client.channels.fetch(CH_ID);
+      await channel.send({ embeds: [embed], components: [actionRow] });
+      // mark as posted in cache
+      postedBetCache.add(betId);
+      await markRowSend(i, 'P');
+    }
+  } catch (err) {
+    console.error('❌ Error in processNewBets():', err);
+  }
+}
 
         const actionRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
