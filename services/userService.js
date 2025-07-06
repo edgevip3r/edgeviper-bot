@@ -29,7 +29,9 @@ async function getUserBetStake(discordId, betId) {
     [discordId, betId]
   );
   console.log('🔍 [DB] rows:', res.rows);
-  return res.rows[0]?.stake ?? null;
+	return (res.rows[0] && res.rows[0].stake != null)
+	  ? parseFloat(res.rows[0].stake)
+	  : null;
 }
 
 /**
