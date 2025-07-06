@@ -85,15 +85,6 @@ client.once('ready', async () => {
     processNewBets();
   });
 });
-  await enablePreload();
-  // initial fetch
-  await processNewBets();
-  // schedule every minute
-  cron.schedule('* * * * *', () => {
-    console.log('⏱️ Checking for new bets…');
-    processNewBets();
-  });
-});
 
 // Interaction handlers
 client.on('interactionCreate', async interaction => {
