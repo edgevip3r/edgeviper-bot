@@ -214,20 +214,6 @@ client.on('interactionCreate', async interaction => {
     const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
 
     // Fetch previous override
-let recommended;
-    if (user.staking_mode === 'flat') {
-      recommended = user.flat_stake;
-    } else if (user.staking_mode === 'stw') {
-      const raw   = user.stw_amount / (odds - 1) || 0;
-      let   stake = Math.round(raw);
-      if (stake * (odds - 1) < user.stw_amount) stake += 1;
-      recommended = stake;
-    } else {
-      const pct = Math.min(user.kelly_pct,100) / 100;
-      recommended = Math.floor(((odds * prob - 1) / (odds - 1)) * user.bankroll * pct);
-    }
-
-    // Fetch previous override
     const previous = await userService.getUserBetStake(discordId, betId);
     const prevNum  = (previous != null && !isNaN(previous)) ? previous : null;
     const defaultOverride = prevNum != null ? prevNum.toFixed(2) : '';
