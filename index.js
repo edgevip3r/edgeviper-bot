@@ -65,13 +65,16 @@ async function enablePreload() {
     console.warn('⚠️ userService.getAllUserSettings not defined; skipping preload');
     return;
   }
-  const all = await userService.getAllUserSettings();
-  all.forEach(u => userSettingsCache.set(u.discord_id, u));
-  console.log(`🔄 Preloaded ${all.length} user settings`);
-}(`🔄 Preloaded ${all.length} user settings`);
+  try {
+    const all = await userService.getAllUserSettings();
+    all.forEach(u => userSettingsCache.set(u.discord_id, u));
+    console.log(`🔄 Preloaded ${all.length} user settings`);
+  } catch(err) {
+    console.error('❌ Failed to preload user settings:', err);
+  }
 }
 
-client.once('ready', async () => {
+client.once('ready', async () =>('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   await enablePreload();
   // initial fetch
