@@ -195,8 +195,26 @@ client.on('interactionCreate', async interaction => {
     let   prob     = parseFloat(row[idxProb]) || 0;
     if (prob > 1) prob /= 100;
 
-    // Calculate recommended stake
-    let recommended;
+        // Calculate recommended stake
+    let recommendedNum = 0;
+    const bankrollNum = parseFloat(user.bankroll) || 0;
+    const kellyPctNum = Math.min(parseFloat(user.kelly_pct) || 0, 100) / 100;
+    const flatNum     = parseFloat(user.flat_stake) || 0;
+    const stwNum      = parseFloat(user.stw_amount) || 0;
+    if (user.staking_mode === 'flat') {
+      recommendedNum = flatNum;
+    } else if (user.staking_mode === 'stw') {
+      const raw = stwNum / (odds - 1) || 0;
+      let stake = Math.round(raw);
+      if (stake * (odds - 1) < stwNum) stake += 1;
+      recommendedNum = stake;
+    } else {
+      recommendedNum = Math.floor(((odds * prob - 1) / (odds - 1)) * bankrollNum * kellyPctNum);
+    }
+    const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
+
+    // Fetch previous override
+let recommended;
     if (user.staking_mode === 'flat') {
       recommended = user.flat_stake;
     } else if (user.staking_mode === 'stw') {
