@@ -17,7 +17,7 @@ const {
 } = require('discord.js');
 
 // sheet helpers
-const { fetchAllMasterRows, fetchNewBets, markRowSend } = require('./sheets');
+const { fetchAllMasterRows, markRowSend } = require('./sheets');
 // DB-backed user stakes & settings
 const userService = require('./services/userService');
 
@@ -26,19 +26,17 @@ const app         = express();
 const WEBHOOK_KEY = process.env.BOT_WEBHOOK_KEY;
 app.use(bodyParser.json());
 
+// In-memory cache for user settings
+const userSettingsCache = new Map();
+
 /**
  * Endpoint: fetch user stakes (for My Bets page)
  */
 app.get('/api/user-stakes', async (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const token      = authHeader.replace(/^Bearer\s+/, '');
-  if (token !== WEBHOOK_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '');
+  if (token !== WEBHOOK_KEY) return res.status(401).json({ error: 'Unauthorized' });
   const { discord_id } = req.query;
-  if (!discord_id) {
-    return res.status(400).json({ error: 'Missing discord_id' });
-  }
+  if (!discord_id) return res.status(400).json({ error: 'Missing discord_id' });
   try {
     const stakes = await userService.listUserStakes(discord_id);
     return res.json(stakes);
@@ -52,20 +50,19 @@ app.get('/api/user-stakes', async (req, res) => {
  * Endpoint: Discord role sync
  */
 app.post('/discord-role', async (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const token      = authHeader.replace(/^Bearer\s+/, '');
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '');
   if (token !== WEBHOOK_KEY) return res.status(401).send('Unauthorized');
   const { action, discord_id, role_id, guild_id } = req.body;
   if (!action || !discord_id || !role_id || !guild_id) {
     return res.status(400).send('Missing fields');
   }
   try {
-    const guild  = await client.guilds.fetch(guild_id);
+    const guild = await client.guilds.fetch(guild_id);
     const member = await guild.members.fetch(discord_id);
     if (action === 'add_role') await member.roles.add(role_id);
     else if (action === 'remove_role') await member.roles.remove(role_id);
     else return res.status(400).send('Invalid action');
-    return res.status(200).send('OK');
+    return res.sendStatus(200);
   } catch (err) {
     console.error('Error in /discord-role:', err);
     return res.status(500).send('Server error');
@@ -87,9 +84,6 @@ app.post('/settings-updated', async (req, res) => {
   }
 });
 
-// In-memory cache for user settings
-const userSettingsCache = new Map();
-
 /**
  * Preload all user settings into cache on startup
  */
@@ -98,13 +92,13 @@ async function enablePreload() {
     const all = await userService.getAllUserSettings();
     all.forEach(u => userSettingsCache.set(u.discord_id, u));
     console.log(`🔄 Preloaded ${all.length} user settings`);
-  } catch(err) {
+  } catch (err) {
     console.error('❌ Failed to preload user settings:', err);
   }
 }
 
 /**
- * Lazy-load settings for a single user (fallback)
+ * Lazy-load settings for a single user
  */
 async function getUserSettings(discordId) {
   if (!userSettingsCache.has(discordId)) {
@@ -116,7 +110,11 @@ async function getUserSettings(discordId) {
 
 // Discord bot client
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
 /**
@@ -124,17 +122,17 @@ const client = new Client({
  */
 async function processNewBets() {
   try {
-    const allRows = await fetchAllMasterRows();
-    for (let i = 1; i < allRows.length; i++) {
-      const row = allRows[i];
-      if (row[9] === 'S') {
-        const [ date, bookie, sport, event, bet, settleDate ] = row;
-        const odds     = parseFloat(row[6]) || 0;
-        const fairOdds = parseFloat(row[7]) || 0;
-        let   probNum  = parseFloat(row[20]) || 0;
+    const rows = await fetchAllMasterRows();
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (r[9] === 'S') {
+        const [ date, bookie, sport, event, betText, settleDate ] = r;
+        const odds     = parseFloat(r[6]) || 0;
+        const fairOdds = parseFloat(r[7]) || 0;
+        let   probNum  = parseFloat(r[20]) || 0;
         if (probNum > 1) probNum /= 100;
         const probability = (probNum * 100).toFixed(2) + '%';
-        const betId    = row[22] || `row${i}`;
+        const betId    = r[22] || `row${i}`;
         const valuePct = fairOdds > 0
           ? ((odds / fairOdds) * 100).toFixed(2) + '%'
           : 'N/A';
@@ -147,7 +145,7 @@ async function processNewBets() {
             { name: 'Bookie',      value: bookie,         inline: true },
             { name: 'Odds',        value: odds.toString(), inline: true },
             { name: 'Probability', value: probability,     inline: true },
-            { name: 'Bet',         value: bet,            inline: false },
+            { name: 'Bet',         value: betText,        inline: false },
             { name: 'Settles',     value: settleDate,     inline: true },
             { name: 'Value %',     value: valuePct,       inline: true }
           )
@@ -171,64 +169,55 @@ async function processNewBets() {
   }
 }
 
-// Interaction handler (modals/buttons)
+// Interaction handler (buttons & modals)
 client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId.startsWith('stakeModal_')) {
     const betId     = interaction.customId.split('_')[1];
     const discordId = interaction.user.id;
-    // timing start
     const startTime = process.hrtime();
 
-    // load user settings (from cache or REST)
+    // Load settings and log source
     const user      = await getUserSettings(discordId);
     const fromCache = userSettingsCache.has(discordId);
     console.log(`🔍 [Settings] for ${discordId} loaded from ${fromCache ? 'cache' : 'source'}`);
 
     if (!user || !user.staking_mode) {
-      return interaction.reply({ content:'❗ Please link Discord first.', flags:64 });
+      return interaction.reply({ content: '❗ Please link Discord first.', flags: 64 });
     }
 
     // Lookup bet row
-    const all       = await fetchAllMasterRows();
-    const header    = all[0] || [];
-    const idxId     = header.indexOf('Bet ID');
-    const idxOdds   = header.indexOf('Odds');
-    const idxProb   = header.indexOf('Probability');
-    const row       = all.slice(1).find(r => r[idxId]?.toString() === betId);
+    const all    = await fetchAllMasterRows();
+    const header = all[0] || [];
+    const idxId  = header.indexOf('Bet ID');
+    const idxO   = header.indexOf('Odds');
+    const idxP   = header.indexOf('Probability');
+    const row    = all.slice(1).find(r => r[idxId]?.toString() === betId);
     if (!row) {
-      return interaction.reply({ content:'❌ Bet not found.', flags:64 });
+      return interaction.reply({ content: '❌ Bet not found.', flags: 64 });
     }
-    const odds     = parseFloat(row[idxOdds]) || 0;
-    let   prob     = parseFloat(row[idxProb]) || 0;
-    if (prob > 1) prob /= 100;
+    const odds = parseFloat(row[idxO]) || 0;
+    let   p    = parseFloat(row[idxP]) || 0;
+    if (p > 1) p /= 100;
 
     // Calculate recommended stake
     let recommendedNum = 0;
-    const bankrollNum = parseFloat(user.bankroll) || 0;
-    const kellyPctNum = Math.min(parseFloat(user.kelly_pct) || 0, 100) / 100;
-    const flatNum     = parseFloat(user.flat_stake) || 0;
-    const stwNum      = parseFloat(user.stw_amount) || 0;
-    if (user.staking_mode === 'flat') {
-      recommendedNum = flatNum;
-    } else if (user.staking_mode === 'stw') {
-      const raw = stwNum / (odds - 1) || 0;
-      let stake = Math.round(raw);
-      if (stake * (odds - 1) < stwNum) stake += 1;
-      recommendedNum = stake;
-    } else {
-      recommendedNum = Math.floor(((odds * prob - 1) / (odds - 1)) * bankrollNum * kellyPctNum);
-    }
+    const bankrollNum  = parseFloat(user.bankroll) || 0;
+    const kellyPctNum  = Math.min(parseFloat(user.kelly_pct) || 0, 100) / 100;
+    const flatNum      = parseFloat(user.flat_stake) || 0;
+    const stwNum       = parseFloat(user.stw_amount) || 0;
+    if (user.staking_mode === 'flat')       recommendedNum = flatNum;
+    else if (user.staking_mode === 'stw') { let raw = stwNum/(odds-1)||0; let sk = Math.round(raw); if (sk*(odds-1)<stwNum) sk++; recommendedNum = sk; }
+    else                                    recommendedNum = Math.floor(((odds*p-1)/(odds-1)) * bankrollNum * kellyPctNum);
     const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
 
-    // timing end
+    // Log timing
     const diff = process.hrtime(startTime);
-    const ms   = (diff[0] * 1000 + diff[1] / 1e6).toFixed(2);
+    const ms   = (diff[0] * 1000 + diff[1]/1e6).toFixed(2);
     console.log(`⏱️ [Timing] fetch+calc for ${discordId}, bet ${betId}: ${ms} ms`);
 
     // Fetch previous override
-    const previous = await userService.getUserBetStake(discordId, betId);
-    const prevNum  = (previous != null && !isNaN(previous)) ? previous : null;
-    const defaultOverride = prevNum != null ? prevNum.toFixed(2) : '';
+    const prevVal = await userService.getUserBetStake(discordId, betId);
+    const defaultOverride = (prevVal != null && !isNaN(prevVal)) ? parseFloat(prevVal).toFixed(2) : '';
 
     // Show modal
     const modal = new ModalBuilder()
@@ -255,10 +244,6 @@ client.on('interactionCreate', async interaction => {
     return interaction.showModal(modal);
   }
 
-  // rest of modalSubmit handler unchanged
-});
-  }
-
   if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
     const betId     = interaction.customId.split('_')[1];
     const discordId = interaction.user.id;
@@ -266,7 +251,7 @@ client.on('interactionCreate', async interaction => {
     const overStr   = interaction.fields.getTextInputValue('override');
     const finalStake= parseFloat(overStr) || parseFloat(recStr);
     await userService.saveUserBetStake(discordId, betId, finalStake);
-    return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
+    return interaction.reply({ content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags: 64 });
   }
 });
 
@@ -281,7 +266,7 @@ client.once('ready', async () => {
   });
 });
 
-// Log in and start webhook listener
+// Login and start webhook listener
 client.login(process.env.DISCORD_TOKEN).catch(err => console.error('❌ Discord login failed:', err));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🔔 Webhook listener on port ${PORT}`));
