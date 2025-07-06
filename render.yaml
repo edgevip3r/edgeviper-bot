@@ -2,5 +2,4 @@ services:
   - type: private_service
     name: edgeviper-pgbouncer
     healthCheck:
-      enabled: true
-      protocol: tcp
+      enabled: false
