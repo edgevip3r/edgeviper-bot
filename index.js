@@ -85,6 +85,7 @@ app.post('/settings-updated', async (req, res) => {
     await userService.saveUserSettings(discord_id, settings);
     await redis.hset('user_settings', discord_id, JSON.stringify(settings));
     userSettingsCache.set(discord_id, settings);
+    console.log(`🔄 [Redis] user_settings updated for ${discord_id}: ${JSON.stringify(settings)}`);
     return res.sendStatus(200);
   } catch (err) {
     console.error('Webhook error:', err);
