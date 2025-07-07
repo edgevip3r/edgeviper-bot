@@ -54,12 +54,12 @@ async function saveUserBetStake(discordId, betId, stake) {
  * List all stakes for a given Discord ID
  */
 async function listUserStakes(discordId) {
-  console.log(`🔍 [DB] listUserStakes for ${discordId}`);
+  // console.log(`🔍 [DB] listUserStakes for ${discordId}`);
   const res = await db.query(
     `SELECT bet_id, stake FROM user_stakes WHERE discord_id = $1`,
     [discordId]
   );
-  console.log('🔍 [DB] stakes rows:', res.rows);
+  // console.log('🔍 [DB] stakes rows:', res.rows);
   return res.rows;
 }
 
