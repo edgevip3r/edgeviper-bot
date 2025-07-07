@@ -1,11 +1,9 @@
 require('dotenv').config();
 
+// Redis client
 const Redis = require('ioredis');
 const redis = new Redis(process.env.REDIS_URL);
-
-// optional logging
 redis.on('error', err => console.error('Redis error:', err));
-redis.on('connect', () => console.log('✅ Redis connected'));
 
 const CH_ID       = process.env.DISCORD_CHANNEL_ID;
 const cron        = require('node-cron');
