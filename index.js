@@ -4,6 +4,7 @@ require('dotenv').config();
 const Redis = require('ioredis');
 const redis = new Redis(process.env.REDIS_URL);
 redis.on('error', err => console.error('Redis error:', err));
+const POSTED_BET_SET = 'postedBets';
 
 const CH_ID       = process.env.DISCORD_CHANNEL_ID;
 const cron        = require('node-cron');
@@ -32,9 +33,11 @@ const app         = express();
 const WEBHOOK_KEY = process.env.BOT_WEBHOOK_KEY;
 app.use(bodyParser.json());
 
-// In-memory cache for quick lookup (backed by Redis)
+// In-memory cache for user settings
 const userSettingsCache = new Map();
-const postedBetCache    = new Set();
+
+// Redis set key for posted bets
+const POSTED_BET_SET = 'postedBets';
 
 /**
  * Endpoint: fetch user stakes (for My Bets page)
@@ -76,17 +79,16 @@ app.post('/discord-role', async (req, res) => {
 
 /**
  * Webhook: settings updates from WordPress
- * Persist to DB and update Redis + in-memory cache
  */
 app.post('/settings-updated', async (req, res) => {
   try {
     const { discord_id, staking_mode, bankroll, kelly_pct, flat_stake, stw_amount } = req.body;
     const settings = { staking_mode, bankroll, kelly_pct, flat_stake, stw_amount };
-    // 1) Save to Postgres
+    // Save to PostgreSQL
     await userService.saveUserSettings(discord_id, settings);
-    // 2) Update Redis hash
+    // Update Redis hash
     await redis.hset('user_settings', discord_id, JSON.stringify(settings));
-    // 3) Update in-memory cache
+    // Update in-memory cache
     userSettingsCache.set(discord_id, settings);
     return res.sendStatus(200);
   } catch (err) {
@@ -112,17 +114,14 @@ async function enablePreload() {
 }
 
 /**
- * Lazy-load settings: check memory, then Redis, then fallback to WordPress REST
+ * Lazy-load settings: memory -> Redis -> WordPress REST
  */
 async function getUserSettings(discordId) {
   if (!userSettingsCache.has(discordId)) {
-    // Try Redis
     const raw = await redis.hget('user_settings', discordId);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      userSettingsCache.set(discordId, parsed);
+      userSettingsCache.set(discordId, JSON.parse(raw));
     } else {
-      // Fallback to WP
       const settings = await userService.findByDiscordId(discordId);
       if (settings) {
         await redis.hset('user_settings', discordId, JSON.stringify(settings));
@@ -144,6 +143,7 @@ const client = new Client({
 
 /**
  * Post new bets and mark them in Google Sheets
+ * Uses Redis SET for deduplication across restarts
  */
 async function processNewBets() {
   try {
@@ -151,8 +151,10 @@ async function processNewBets() {
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
       const betId = r[22] || `row${i}`;
-      // only process new 'S' rows not already posted
-      if (r[9] !== 'S' || postedBetCache.has(betId)) continue;
+      // skip if not pending or already posted
+      if (r[9] !== 'S') continue;
+      const already = await redis.sismember(POSTED_BET_SET, betId);
+      if (already) continue;
 
       const [ date, bookie, sport, event, betText, settleDate ] = r;
       const odds     = parseFloat(r[6]) || 0;
@@ -188,7 +190,9 @@ async function processNewBets() {
 
       const channel = await client.channels.fetch(CH_ID);
       await channel.send({ embeds: [embed], components: [actionRow] });
-      postedBetCache.add(betId);
+      // record in Redis set & expire in 24h
+      await redis.sadd(POSTED_BET_SET, betId);
+      await redis.expire(POSTED_BET_SET, 86400);
       await markRowSend(i, 'P');
     }
   } catch (err) {
@@ -203,7 +207,7 @@ client.on('interactionCreate', async interaction => {
     const discordId = interaction.user.id;
     const startTime = process.hrtime();
 
-    // Load settings from cache/Redis/WP
+    // Load settings
     const user      = await getUserSettings(discordId);
     const fromCache = userSettingsCache.has(discordId);
     console.log(`🔍 [Settings] for ${discordId} loaded from ${fromCache ? 'cache' : 'source'}`);
@@ -219,9 +223,7 @@ client.on('interactionCreate', async interaction => {
     const idxO   = header.indexOf('Odds');
     const idxP   = header.indexOf('Probability');
     const row    = all.slice(1).find(r => r[idxId]?.toString() === betId);
-    if (!row) {
-      return interaction.reply({ content: '❌ Bet not found.', flags: 64 });
-    }
+    if (!row) return interaction.reply({ content: '❌ Bet not found.', flags: 64 });
     const odds = parseFloat(row[idxO]) || 0;
     let   p    = parseFloat(row[idxP]) || 0;
     if (p > 1) p /= 100;
@@ -229,22 +231,21 @@ client.on('interactionCreate', async interaction => {
     // Calculate recommended stake
     let recommendedNum = 0;
     const bankrollNum  = parseFloat(user.bankroll) || 0;
-    const kellyPctNum  = Math.min(parseFloat(user.kelly_pct) || 0, 100) / 100;
-    const flatNum      = parseFloat(user.flat_stake) || 0;
-    const stwNum       = parseFloat(user.stw_amount) || 0;
+    const kellyPctNum  = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
+    const flatNum      = parseFloat(user.flat_stake)||0;
+    const stwNum       = parseFloat(user.stw_amount)||0;
     if (user.staking_mode === 'flat')       recommendedNum = flatNum;
     else if (user.staking_mode === 'stw') { let raw=stwNum/(odds-1)||0; let sk=Math.round(raw); if(sk*(odds-1)<stwNum) sk++; recommendedNum=sk; }
-    else                                    recommendedNum = Math.floor(((odds*p-1)/(odds-1)) * bankrollNum * kellyPctNum);
-    const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
+    else                                    recommendedNum = Math.floor(((odds*p-1)/(odds-1))*bankrollNum*kellyPctNum);
+    const recommended = Number.isFinite(recommendedNum)?recommendedNum:0;
 
     // Log timing
     const diff = process.hrtime(startTime);
-    const ms   = (diff[0] * 1000 + diff[1]/1e6).toFixed(2);
-    console.log(`⏱️ [Timing] fetch+calc for ${discordId}, bet ${betId}: ${ms} ms`);
+    console.log(`⏱️ [Timing] fetch+calc for ${discordId}, bet ${betId}: ${(diff[0]*1e3+diff[1]/1e6).toFixed(2)} ms`);
 
-    // Fetch previous override
+    // Fetch override
     const prevVal = await userService.getUserBetStake(discordId, betId);
-    const defaultOverride = (prevVal != null && !isNaN(prevVal)) ? parseFloat(prevVal).toFixed(2) : '';
+    const defaultOverride = (prevVal!=null&&!isNaN(prevVal))?parseFloat(prevVal).toFixed(2):'';
 
     // Show modal
     const modal = new ModalBuilder()
@@ -271,29 +272,21 @@ client.on('interactionCreate', async interaction => {
     return interaction.showModal(modal);
   }
 
-  if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
+  if (interaction.type===InteractionType.ModalSubmit&&interaction.customId.startsWith('stakeModalSubmit_')) {
     const betId     = interaction.customId.split('_')[1];
     const discordId = interaction.user.id;
     const recStr    = interaction.fields.getTextInputValue('recommended');
     const overStr   = interaction.fields.getTextInputValue('override');
-    const finalStake= parseFloat(overStr) || parseFloat(recStr);
+    const finalStake= parseFloat(overStr)||parseFloat(recStr);
     await userService.saveUserBetStake(discordId, betId, finalStake);
-    return interaction.reply({ content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags: 64 });
+    return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
   }
 });
 
 // Bot ready: preload settings, post new bets, schedule
-client.once('ready', async () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
-  await enablePreload();
-  await processNewBets();
-  cron.schedule('* * * * *', () => {
-    console.log('⏱️ Checking for new bets…');
-    processNewBets();
-  });
-});
+client.once('ready',async()=>{console.log(`✅ Logged in as ${client.user.tag}`);await enablePreload();await processNewBets();cron.schedule('* * * * *',()=>{console.log('⏱️ Checking for new bets…');processNewBets();});});
 
-// Login and start webhook listener
-client.login(process.env.DISCORD_TOKEN).catch(err => console.error('❌ Discord login failed:', err));
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🔔 Webhook listener on port ${PORT}`));
+// Login & webhook listener
+client.login(process.env.DISCORD_TOKEN).catch(err=>console.error('❌ Discord login failed:',err));
+const PORT=process.env.PORT||3000;
+app.listen(PORT,()=>console.log(`🔔 Webhook listener on port ${PORT}`));
