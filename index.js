@@ -154,9 +154,12 @@ async function processNewBets() {
       const [ date, bookie, sport, event, betText, settleDate ] = r;
       const odds     = parseFloat(r[6]) || 0;
       const fairOdds = parseFloat(r[7]) || 0;
-      let   probNum  = parseFloat(r[20]) || 0;
-      if (probNum > 1) probNum /= 100;
-      const probability = (probNum * 100).toFixed(2) + '%';
+      // let   probNum  = parseFloat(r[20]) || 0;
+      // if (probNum > 1) probNum /= 100;
+      // const probability = (probNum * 100).toFixed(2) + '%';
+	  const valueThreshold = 105;
+	  const rawMinOdds     = fairOdds * (valueThreshold/100);
+	  const minOdds        = Math.floor(rawMinOdds * 100) / 100;
       const valuePct = fairOdds > 0
         ? ((odds / fairOdds) * 100).toFixed(2) + '%'
         : 'N/A';
@@ -168,7 +171,7 @@ async function processNewBets() {
         .addFields(
           { name: 'Bookie',      value: bookie,         inline: true },
           { name: 'Odds',        value: odds.toString(), inline: true },
-          { name: 'Probability', value: probability,     inline: true },
+          { name: 'Min Odds',value: minOdds.toFixed(2),   inline: true },
           { name: 'Bet',         value: betText,        inline: false },
           { name: 'Settles',     value: settleDate,     inline: true },
           { name: 'Value %',     value: valuePct,       inline: true }
