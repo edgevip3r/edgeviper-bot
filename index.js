@@ -174,7 +174,8 @@ async function processNewBets() {
           { name: 'Min Odds',value: minOdds.toFixed(2),   inline: true },
           { name: 'Bet',         value: betText,        inline: false },
           { name: 'Settles',     value: settleDate,     inline: true },
-          { name: 'Value %',     value: valuePct,       inline: true }
+          { name: 'Value %',     value: valuePct,       inline: true },
+		  { name: 'Fair Odds', value: fairOdds.toFixed(2), inline: true }
         )
         .setTimestamp()
         .setFooter({ text: `Bet ID: ${betId}` });
