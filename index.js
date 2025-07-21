@@ -291,7 +291,8 @@ client.on('interactionCreate', async interaction => {
     await userService.saveUserBetStake(discordId, betId, finalStake, finalOdds);
 	return interaction.reply({
 		content: `💵 You’ve staked **£${finalStake.toFixed(2)}** at **${finalOdds.toFixed(2)}** on Bet ${betId}`,
-		flags: 64
+		// flags: 64
+		ephemeral: true
 	});
   }
 });
