@@ -260,7 +260,17 @@ client.on('interactionCreate', async interaction => {
             .setStyle(TextInputStyle.Short)
             .setValue(defaultOverride)
             .setRequired(false)
-        )
+        ),
+		    new ActionRowBuilder().addComponents(
+		new TextInputBuilder()
+			.setCustomId('odds_override')
+			.setLabel('Odds Override (Optional)')
+			.setStyle(TextInputStyle.Short)
+			// Tip #1: if editing, pre-fill with saved override; otherwise show scraped odds as placeholder
+			.setValue(existingBet ? existingBet.odds.toFixed(2) : null)
+			.setPlaceholder(existingBet ? null : odds.toFixed(2))
+			.setRequired(false)
+		)
       );
     return interaction.showModal(modal);
   }
@@ -271,8 +281,18 @@ client.on('interactionCreate', async interaction => {
     const recStr=interaction.fields.getTextInputValue('recommended');
     const overStr=interaction.fields.getTextInputValue('override');
     const finalStake=parseFloat(overStr)||parseFloat(recStr);
-    await userService.saveUserBetStake(discordId, betId, finalStake);
-    return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
+	const oddsStr     = interaction.fields.getTextInputValue('odds_override');
+	const oddsOverride= oddsStr ? parseFloat(oddsStr) : null;
+	let finalOdds     = oddsOverride;
+	if (finalOdds === null) {
+		const existing = await userService.getBet(discordId, betId);
+		finalOdds = existing ? existing.odds : null;
+	}
+    await userService.saveUserBetStake(discordId, betId, finalStake, finalOdds);
+	return interaction.reply({
+		content: `💵 You’ve staked **£${finalStake.toFixed(2)}** at **${finalOdds.toFixed(2)}** on Bet ${betId}`,
+		flags: 64
+	});
   }
 });
 
