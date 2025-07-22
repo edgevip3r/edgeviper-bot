@@ -38,7 +38,7 @@ async function getUserBetStake(discordId, betId) {
  * Save or update the user's override stake for a specific bet
  */
 async function saveUserBetStake(discordId, betId, stake, odds) {
-  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}`, odds ${odds}`);
+  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}, odds ${odds}`);
   await db.query(
     `INSERT INTO user_stakes(discord_id, bet_id, stake, odds, updated_at)
      VALUES($1, $2, $3, $4, NOW())
