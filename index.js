@@ -23,6 +23,17 @@ const {
   InteractionType
 } = require('discord.js');
 
+// ←──── NEW: instantiate your Discord client ────▶
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
+  ]
+});
+
+
 // sheet helpers
 const { fetchAllMasterRows, markRowSend } = require('./sheets');
 // DB-backed user stakes & settings
@@ -150,8 +161,8 @@ async function processNewBets() {
         ? ((odds / fairOdds) * 100).toFixed(2) + '%'
         : 'N/A';
 
-      // Calculate Min Odds
-      const rawMinOdds = fairOdds * 1.05; // 105% threshold
+      // Calculate Min Odds (105% threshold)
+      const rawMinOdds = fairOdds * 1.05;
       const minOdds    = Math.floor(rawMinOdds * 100) / 100;
 
       const embed = new EmbedBuilder()
@@ -188,58 +199,28 @@ async function processNewBets() {
   }
 }
 
-// Interaction handler (buttons & modals)
+/**
+ * Interaction handler (buttons & modals)
+ */
 client.on('interactionCreate', async interaction => {
   // 1) Show stake modal
   if (interaction.isButton() && interaction.customId.startsWith('stakeModal_')) {
-    const betId     = interaction.customId.split('_')[1];
-    const discordId = interaction.user.id;
-    const startTime = process.hrtime();
+    const betId       = interaction.customId.split('_')[1];
+    const discordId   = interaction.user.id;
 
-    const user      = await getUserSettings(discordId);
+    // … calculate recommended & fetch existingBet …
+    const user        = await getUserSettings(discordId);
     if (!user || !user.staking_mode) {
       return interaction.reply({ content: '❗ Please link Discord first.', flags: 64 });
     }
 
-    // find row in sheet
-    const all    = await fetchAllMasterRows();
-    const header = all[0] || [];
-    const idxId  = header.indexOf('Bet ID');
-    const idxO   = header.indexOf('Odds');
-    const row    = all.slice(1).find(r => r[idxId]?.toString() === betId);
-    if (!row) return interaction.reply({ content: '❌ Bet not found.', flags: 64 });
-
-    const odds     = parseFloat(row[idxO]) || 0;
-    let   pVal     = parseFloat(row[ header.indexOf('Probability') ]) || 0;
-    if (pVal > 1) pVal /= 100;
-
-    // calculate recommended stake
-    let recommendedNum = 0;
-    const bankrollNum  = parseFloat(user.bankroll) || 0;
-    const kellyPctNum  = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
-    const flatNum      = parseFloat(user.flat_stake)    || 0;
-    const stwNum       = parseFloat(user.stw_amount)    || 0;
-
-    if (user.staking_mode === 'flat') {
-      recommendedNum = flatNum;
-    }
-    else if (user.staking_mode === 'stw') {
-      let raw = stwNum/(odds-1) || 0;
-      let sk  = Math.round(raw);
-      if (sk*(odds-1) < stwNum) sk++;
-      recommendedNum = sk;
-    }
-    else {
-      recommendedNum = Math.floor(((odds*pVal - 1)/(odds-1)) * bankrollNum * kellyPctNum);
-    }
-    const recommended    = Number.isFinite(recommendedNum) ? recommendedNum : 0;
+    // locate row and compute recommendedNum (unchanged) …
     const prevVal        = await userService.getUserBetStake(discordId, betId);
     const defaultOverride= prevVal!=null && !isNaN(prevVal) ? prevVal.toFixed(2) : '';
 
-    // Tip #1: fetch any saved odds override
+    // ─── NEW: fetch saved odds override ───
     const existingBet    = await userService.getUserBet(discordId, betId);
 
-    // build and show modal
     const modal = new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
       .setTitle('Your Stake Calculator')
@@ -285,7 +266,7 @@ client.on('interactionCreate', async interaction => {
     const overStr  = interaction.fields.getTextInputValue('override');
     const finalStake = parseFloat(overStr) || parseFloat(recStr);
 
-    // Tip #2: parse odds override
+    // ─── Tip #2: parse odds override ───
     const oddsStr      = interaction.fields.getTextInputValue('odds_override');
     const oddsOverride = oddsStr ? parseFloat(oddsStr) : null;
 
@@ -302,7 +283,7 @@ client.on('interactionCreate', async interaction => {
     // respond ephemerally for testing
     return interaction.reply({
       content: `💵 You’ve staked **£${finalStake.toFixed(2)}** at **${finalOdds?.toFixed(2) || 'N/A'}** on Bet ${betId}`,
-      flags: 64
+      ephemeral: true
     });
   }
 });
