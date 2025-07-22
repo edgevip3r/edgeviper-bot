@@ -29,53 +29,37 @@ async function getUserBetStake(discordId, betId) {
     [discordId, betId]
   );
   console.log('🔍 [DB] rows:', res.rows);
-  return (res.rows[0] && res.rows[0].stake != null)
-    ? parseFloat(res.rows[0].stake)
-    : null;
+	return (res.rows[0] && res.rows[0].stake != null)
+	  ? parseFloat(res.rows[0].stake)
+	  : null;
 }
 
 /**
- * Save or update the user's override stake and odds for a specific bet
+ * Save or update the user's override stake for a specific bet
  */
-async function saveUserBetStake(discordId, betId, stake, odds) {
-  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}, odds ${odds}`);
+async function saveUserBetStake(discordId, betId, stake) {
+  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}`);
   await db.query(
-    `INSERT INTO user_stakes(discord_id, bet_id, stake, odds, updated_at)
-     VALUES($1, $2, $3, $4, NOW())
+    `INSERT INTO user_stakes(discord_id, bet_id, stake, updated_at)
+     VALUES($1, $2, $3, NOW())
      ON CONFLICT(discord_id, bet_id)
-     DO UPDATE SET
-       stake      = EXCLUDED.stake,
-       odds       = EXCLUDED.odds,
-       updated_at = EXCLUDED.updated_at`,
-    [discordId, betId, stake, odds]
+     DO UPDATE SET stake = EXCLUDED.stake,
+                   updated_at = EXCLUDED.updated_at`,
+    [discordId, betId, stake]
   );
   console.log('💾 [DB] save complete');
-}
-
-/**
- * Fetch both stake and odds for a given user/bet
- */
-async function getUserBet(discordId, betId) {
-  console.log(`🔍 [DB] getUserBet for ${discordId}, bet ${betId}`);
-  const res = await db.query(
-    `SELECT stake, odds FROM user_stakes
-     WHERE discord_id = $1 AND bet_id = $2`,
-    [discordId, betId]
-  );
-  console.log('🔍 [DB] rows:', res.rows);
-  return res.rows[0] || null;
 }
 
 /**
  * List all stakes for a given Discord ID
  */
 async function listUserStakes(discordId) {
-  console.log(`🔍 [DB] listUserStakes for ${discordId}`);
+  // console.log(`🔍 [DB] listUserStakes for ${discordId}`);
   const res = await db.query(
     `SELECT bet_id, stake FROM user_stakes WHERE discord_id = $1`,
     [discordId]
   );
-  console.log('🔍 [DB] stakes rows:', res.rows);
+  // console.log('🔍 [DB] stakes rows:', res.rows);
   return res.rows;
 }
 
@@ -106,8 +90,7 @@ async function saveUserSettings(discordId, settings) {
 async function getAllUserSettings() {
   console.log('🔍 [DB] getAllUserSettings');
   const res = await db.query(
-    `SELECT discord_id, staking_mode, bankroll, kelly_pct, flat_stake, stw_amount FROM user_settings`
-  );
+    `SELECT discord_id, staking_mode, bankroll, kelly_pct, flat_stake, stw_amount FROM user_settings`);
   console.log('🔍 [DB] all settings rows:', res.rows.length);
   return res.rows;
 }
@@ -116,7 +99,6 @@ module.exports = {
   findByDiscordId,
   getUserBetStake,
   saveUserBetStake,
-  getUserBet,
   listUserStakes,
   saveUserSettings,
   getAllUserSettings
