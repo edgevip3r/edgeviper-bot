@@ -240,6 +240,8 @@ client.on('interactionCreate', async interaction => {
 
     const prevVal=await userService.getUserBetStake(discordId, betId);
     const defaultOverride=(prevVal!=null&&!isNaN(prevVal))?parseFloat(prevVal).toFixed(2):'';
+	
+	const existingBet = await userService.getUserBet(discordId, betId);
 
     const modal=new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
@@ -261,7 +263,7 @@ client.on('interactionCreate', async interaction => {
             .setValue(defaultOverride)
             .setRequired(false)
         ),
-		    new ActionRowBuilder().addComponents(
+		new ActionRowBuilder().addComponents(
 		new TextInputBuilder()
 			.setCustomId('odds_override')
 			.setLabel('Odds Override (Optional)')
