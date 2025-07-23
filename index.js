@@ -151,31 +151,35 @@ async function processNewBets() {
       const already = await redis.sismember(POSTED_BET_SET, betId);
       if (already) continue;
 
+      // Destructure main fields and pull URL from new column X (index 23)
       const [ date, bookie, sport, event, betText, settleDate ] = r;
+      const bookieUrl = r[23] || '';
       const odds     = parseFloat(r[6]) || 0;
       const fairOdds = parseFloat(r[7]) || 0;
-      // let   probNum  = parseFloat(r[20]) || 0;
-      // if (probNum > 1) probNum /= 100;
-      // const probability = (probNum * 100).toFixed(2) + '%';
-	  const valueThreshold = 105;
-	  const rawMinOdds     = fairOdds * (valueThreshold/100);
-	  const minOdds        = Math.floor(rawMinOdds * 100) / 100;
+      const valueThreshold = 105;
+      const rawMinOdds     = fairOdds * (valueThreshold/100);
+      const minOdds        = Math.floor(rawMinOdds * 100) / 100;
       const valuePct = fairOdds > 0
         ? ((odds / fairOdds) * 100).toFixed(2) + '%'
         : 'N/A';
 
+      // Build embed, making Bookie name a hyperlink if URL provided
       const embed = new EmbedBuilder()
         .setColor('#2E7D32')
         .setTitle('💰 New Value Bet 💰')
         .setDescription(`**${sport}** — ${event}`)
         .addFields(
-          { name: 'Bookie',      value: bookie,         inline: true },
-          { name: 'Odds',        value: odds.toString(), inline: true },
-          { name: 'Min Odds',value: minOdds.toFixed(2),   inline: true },
-          { name: 'Bet',         value: betText,        inline: false },
-          { name: 'Settles',     value: settleDate,     inline: true },
-          { name: 'Value %',     value: valuePct,       inline: true },
-		  { name: 'Fair Odds', value: fairOdds.toFixed(2), inline: true }
+          {
+            name: 'Bookie',
+            value: bookieUrl ? `[${bookie}](${bookieUrl})` : bookie,
+            inline: true
+          },
+          { name: 'Odds',        value: odds.toString(),          inline: true },
+          { name: 'Min Odds',    value: minOdds.toFixed(2),       inline: true },
+          { name: 'Bet',         value: betText,                  inline: false },
+          { name: 'Settles',     value: settleDate,              inline: true },
+          { name: 'Value %',     value: valuePct,                inline: true },
+          { name: 'Fair Odds',   value: fairOdds.toFixed(2),     inline: true }
         )
         .setTimestamp()
         .setFooter({ text: `Bet ID: ${betId}` });
@@ -291,3 +295,5 @@ client.once('ready', async () => {
 client.login(process.env.DISCORD_TOKEN).catch(err=>console.error('❌ Discord login failed:',err));
 const PORT=process.env.PORT||3000;
 app.listen(PORT,()=>console.log(`🔔 Webhook listener on port ${PORT}`));
+
+module.exports = app;

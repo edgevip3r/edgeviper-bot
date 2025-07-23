@@ -1,4 +1,4 @@
-// sheets.js
+// File: sheets.js
 const { google } = require('googleapis');
 const creds = require('./credentials.json');      // ← your service account key
 
@@ -23,7 +23,7 @@ async function fetchAllMasterRows() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.SHEET_ID,
-    range: 'MasterBets!A:W'
+    range: 'MasterBets!A:X'
   });
   return res.data.values || [];
 }
