@@ -71,7 +71,7 @@ async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
  * Save or update the user's override stake for a specific bet
  */
 async function saveUserBetStake(discordId, betId, stake, oddsOverride, notes) {
-  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}, notes ${notes}`);
+  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}, oddsOverride ${oddsOverride}, notes ${notes}`);
   // === NOTES HANDLING ===
   notes = notes ?? '';
   // === END NOTES HANDLING ===
@@ -94,7 +94,7 @@ async function saveUserBetStake(discordId, betId, stake, oddsOverride, notes) {
 async function listUserStakes(discordId) {
   // console.log(`🔍 [DB] listUserStakes for ${discordId}`);
   const res = await db.query(
-    `SELECT bet_id, stake, notes FROM user_stakes WHERE discord_id = $1 ORDER BY bet_id DESC`,
+    `SELECT bet_id, stake, odds_override, notes FROM user_stakes WHERE discord_id = $1 ORDER BY bet_id DESC`,
     [discordId]
   );
   // console.log('🔍 [DB] stakes rows:', res.rows);
@@ -133,9 +133,32 @@ async function getAllUserSettings() {
   return res.rows;
 }
 
+// === ODDS OVERRIDE SUPPORT ===
+async function getUserBetOddsOverride(discordId, betId) {
+  const res = await db.query(
+    'SELECT odds_override FROM user_stakes WHERE discord_id = $1 AND bet_id = $2',
+    [discordId, betId]
+  );
+  return res.rows[0]?.odds_override ?? null;
+}
+
+async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
+  await db.query(
+    `UPDATE user_stakes
+        SET odds_override = $1,
+            updated_at    = NOW()
+      WHERE discord_id = $2
+        AND bet_id     = $3`,
+    [oddsOverride, discordId, betId]
+  );
+}
+// === END OVERRIDE SUPPORT ===
+
 module.exports = {
   findByDiscordId,
   getUserBetStake,
+  getUserBetOddsOverride,    // new
+  saveUserBetOddsOverride,   // new
   getUserBetNotes,    // === NOTES ADDITION ===
   saveUserBetStake,
   listUserStakes,

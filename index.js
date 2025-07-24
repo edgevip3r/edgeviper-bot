@@ -312,6 +312,7 @@ if (interaction.type === InteractionType.ModalSubmit && interaction.customId.sta
   // Parse values
   const finalStake         = parseFloat(overStr) || parseFloat(recStr);
   const finalOddsOverride = oddsStr ? parseFloat(oddsStr) : null;         // === ODDS OVERRIDE ===
+  const originalOdds = /* e.g. fetch from your cached masterBets map: */ global.masterBets.get(betId).odds;
   const notes              = notesStr ?? '';
 
   // Fetch previous override and settings
