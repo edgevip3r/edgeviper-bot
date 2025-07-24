@@ -275,7 +275,7 @@ client.on('interactionCreate', async interaction => {
           new TextInputBuilder()
             .setCustomId('notes')
             .setLabel('Notes (optional)')
-            .setStyle(TextInputStyle.Paragraph)
+            .setStyle(TextInputStyle.Short)
             .setValue(defaultNotes)
             .setRequired(false)
         )
@@ -292,10 +292,11 @@ client.on('interactionCreate', async interaction => {
     const finalStake=parseFloat(overStr)||parseFloat(recStr);
 	
     // === NOTES ADDITION ===
-    const notes = interaction.fields.getTextInputValue('notes');
+    let notes = interaction.fields.getTextInputValue('notes');
+    notes = notes ?? '';
     // === END NOTES ADDITION ===
 	
-    await userService.saveUserBetStake(discordId, betId, finalStake);
+    await userService.saveUserBetStake(discordId, betId, finalStake, notes);
     return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
   }
 });
