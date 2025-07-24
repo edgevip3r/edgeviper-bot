@@ -249,6 +249,11 @@ client.on('interactionCreate', async interaction => {
     const prevNotes = await userService.getUserBetNotes(discordId, betId);
     const defaultNotes = prevNotes || '';
     // === END NOTES ADDITION ===
+	
+	// === ODDS OVERRIDE ===
+	const prevOddsOverride    = await userService.getUserBetOddsOverride(discordId, betId);
+	const defaultOddsOverride = prevOddsOverride != null ? prevOddsOverride.toFixed(2) : '';
+	// === ODDS OVERRIDE ===
 
     const modal=new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
@@ -270,6 +275,16 @@ client.on('interactionCreate', async interaction => {
             .setValue(defaultOverride)
             .setRequired(false)
         ),
+		// === ODDS OVERRIDE ===
+		new ActionRowBuilder().addComponents(
+		  new TextInputBuilder()
+			.setCustomId('oddsOverride')
+			.setLabel('Odds Override (optional)')
+			.setStyle(TextInputStyle.Short)
+			.setValue(defaultOddsOverride)
+			.setRequired(false)
+		),
+		// === END ODDS OVERRIDE ===
         // === NOTES ADDITION ===
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
@@ -284,22 +299,62 @@ client.on('interactionCreate', async interaction => {
     return interaction.showModal(modal);
   }
 
-  if (interaction.type===InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
-    const betId=interaction.customId.split('_')[1];
-    const discordId=interaction.user.id;
-    const recStr=interaction.fields.getTextInputValue('recommended');
-    const overStr=interaction.fields.getTextInputValue('override');
-    const finalStake=parseFloat(overStr)||parseFloat(recStr);
-	
-    // === NOTES ADDITION ===
-    let notes = interaction.fields.getTextInputValue('notes');
-    notes = notes ?? '';
-    // === END NOTES ADDITION ===
-	
-    await userService.saveUserBetStake(discordId, betId, finalStake, notes);
-    return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
+if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
+  const betId     = interaction.customId.split('_')[1];
+  const discordId = interaction.user.id;
+
+  // Gather inputs
+  const recStr  = interaction.fields.getTextInputValue('recommended');
+  const overStr = interaction.fields.getTextInputValue('override');
+  const oddsStr = interaction.fields.getTextInputValue('oddsOverride');  // === ODDS OVERRIDE ===
+  const notesStr = interaction.fields.getTextInputValue('notes');      // === NOTES ===
+
+  // Parse values
+  const finalStake         = parseFloat(overStr) || parseFloat(recStr);
+  const finalOddsOverride = oddsStr ? parseFloat(oddsStr) : null;         // === ODDS OVERRIDE ===
+  const notes              = notesStr ?? '';
+
+  // Fetch previous override and settings
+  const prevOddsOverride = await userService.getUserBetOddsOverride(discordId, betId);   // === ODDS OVERRIDE ===
+  const userSettings     = await userService.getUserSettings(discordId);
+  const stakeType        = userSettings.stakingType;  // 'flat', 'kelly', 'stw'
+
+  // === Branch by staking type ===
+  // 1) Flat staking: ignore odds override, always log bet
+  if (stakeType === 'flat') {
+    await userService.saveUserBetStake(discordId, betId, finalStake, finalOddsOverride, notes);
+    return interaction.reply({
+      content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`,
+      ephemeral: true
+    });
   }
-});
+
+  // 2) Stake-To-Win or Kelly flows
+  // a) First-time override
+  if ((stakeType === 'stw' || stakeType === 'kelly') && prevOddsOverride == null && finalOddsOverride !== null) {
+    await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);               // === ODDS OVERRIDE ===
+    return interaction.reply({
+      content: `🔄 Odds override saved from **${originalOdds.toFixed(2)}** to **${finalOddsOverride.toFixed(2)}**. Please reopen to see your updated stake.`,
+      ephemeral: true
+    });
+  }
+
+  // b) Subsequent override change
+  if ((stakeType === 'stw' || stakeType === 'kelly') && prevOddsOverride != null && finalOddsOverride !== prevOddsOverride) {
+    await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);               // === ODDS OVERRIDE ===
+    return interaction.reply({
+      content: `🔄 Odds override updated from **${prevOddsOverride.toFixed(2)}** to **${finalOddsOverride.toFixed(2)}**. Please reopen to see the new stake.`,
+      ephemeral: true
+    });
+  }
+
+  // c) Ready to log bet (override unchanged or no override)
+  await userService.saveUserBetStake(discordId, betId, finalStake, finalOddsOverride, notes);     // === ODDS OVERRIDE ===
+  return interaction.reply({
+    content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`,
+    ephemeral: true
+  });
+}
 
 // Bot ready: preload settings, post new bets, schedule
 client.once('ready', async () => {
