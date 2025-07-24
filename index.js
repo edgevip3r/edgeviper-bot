@@ -24,7 +24,18 @@ const {
 // sheet helpers
 const { fetchAllMasterRows, markRowSend } = require('./sheets');
 // DB-backed user stakes & settings
-const userService = require('./services/userService');
+const {
+  getUserBetStake,
+  getUserBetNotes,
+  saveUserBetStake,
+  getUserBetOddsOverride,    // ← newly added
+  saveUserBetOddsOverride,   // ← newly added
+  getUserSettings,
+  listUserStakes,
+  saveUserSettings,
+  findByDiscordId,
+  getAllUserSettings
+} = require('./services/userService');
 
 // Express for REST endpoints
 const app = express();
@@ -251,7 +262,7 @@ client.on('interactionCreate', async interaction => {
     // === END NOTES ADDITION ===
 	
 	// === ODDS OVERRIDE ===
-	const prevOddsOverride    = await userService.getUserBetOddsOverride(discordId, betId);
+	const prevOddsOverride    = await getUserBetOddsOverride(discordId, betId);
 	const defaultOddsOverride = prevOddsOverride != null ? prevOddsOverride.toFixed(2) : '';
 	// === ODDS OVERRIDE ===
 
@@ -316,7 +327,7 @@ if (interaction.type === InteractionType.ModalSubmit && interaction.customId.sta
   const notes              = notesStr ?? '';
 
   // Fetch previous override and settings
-  const prevOddsOverride = await userService.getUserBetOddsOverride(discordId, betId);   // === ODDS OVERRIDE ===
+  const prevOddsOverride = await getUserBetOddsOverride(discordId, betId);   // === ODDS OVERRIDE ===
   const userSettings     = await userService.getUserSettings(discordId);
   const stakeType        = userSettings.stakingType;  // 'flat', 'kelly', 'stw'
 
@@ -333,7 +344,7 @@ if (interaction.type === InteractionType.ModalSubmit && interaction.customId.sta
   // 2) Stake-To-Win or Kelly flows
   // a) First-time override
   if ((stakeType === 'stw' || stakeType === 'kelly') && prevOddsOverride == null && finalOddsOverride !== null) {
-    await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);               // === ODDS OVERRIDE ===
+    await saveUserBetOddsOverride(discordId, betId, finalOddsOverride);               // === ODDS OVERRIDE ===
     return interaction.reply({
       content: `🔄 Odds override saved from **${originalOdds.toFixed(2)}** to **${finalOddsOverride.toFixed(2)}**. Please reopen to see your updated stake.`,
       ephemeral: true
@@ -342,7 +353,7 @@ if (interaction.type === InteractionType.ModalSubmit && interaction.customId.sta
 
   // b) Subsequent override change
   if ((stakeType === 'stw' || stakeType === 'kelly') && prevOddsOverride != null && finalOddsOverride !== prevOddsOverride) {
-    await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);               // === ODDS OVERRIDE ===
+    await saveUserBetOddsOverride(discordId, betId, finalOddsOverride);               // === ODDS OVERRIDE ===
     return interaction.reply({
       content: `🔄 Odds override updated from **${prevOddsOverride.toFixed(2)}** to **${finalOddsOverride.toFixed(2)}**. Please reopen to see the new stake.`,
       ephemeral: true
