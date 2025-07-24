@@ -225,58 +225,79 @@ async function processNewBets() {
 // Interaction handler (buttons & modals)
 client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId.startsWith('stakeModal_')) {
-	const raw = interaction.customId.split('_')[1];
-	const betId = raw.replace(/,/g, '');
+    // ── Normalize Bet ID (strip commas) ──
+    const raw     = interaction.customId.split('_')[1];
+    const betId   = raw.replace(/,/g, '');
     const discordId = interaction.user.id;
     const startTime = process.hrtime();
 
-    const user = await getUserSettings(discordId);
+    // ── Load user settings ──
+    const user      = await getUserSettings(discordId);
     const fromCache = userSettingsCache.has(discordId);
     console.log(`🔍 [Settings] for ${discordId} loaded from ${fromCache ? 'cache' : 'source'}`);
 
     if (!user || !user.staking_mode) {
-      return interaction.reply({ content: '❗ Please link Discord first.', flags: 64 });
+      return interaction.reply({ content: '❗ Please link Discord first.', ephemeral: true });
     }
 
-    const all    = await fetchAllMasterRows();
-    const header = all[0] || [];
-    const idxId  = header.indexOf('Bet ID');
-    const idxO   = header.indexOf('Odds');
-    const idxP   = header.indexOf('Probability');
-    const row    = all.slice(1).find(r => r[idxId]?.toString() === betId);
-    if (!row) return interaction.reply({ content: '❌ Bet not found.', flags: 64 });
+    // ── Lookup in-memory row by Bet ID ──
+    const masterRow = global.masterBets.get(betId);
+    if (!masterRow) {
+      return interaction.reply({
+        content: `❌ Bet ${raw} not found. Please try again.`,
+        ephemeral: true
+      });
+    }
 
-    const odds = parseFloat(row[idxO]) || 0;
-    let   pVal = parseFloat(row[idxP]) || 0;
+    // ── Extract odds & probability ──
+    const odds = parseFloat(masterRow['Odds']) || 0;
+    let   pVal = parseFloat(masterRow['Probability']) || 0;
     if (pVal > 1) pVal /= 100;
 
+    // ── Calculate recommended stake ──
     let recommendedNum = 0;
-    const bankrollNum = parseFloat(user.bankroll)||0;
-    const kellyPctNum = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
-    const flatNum     = parseFloat(user.flat_stake)||0;
-    const stwNum      = parseFloat(user.stw_amount)||0;
-    if (user.staking_mode==='flat') recommendedNum=flatNum;
-    else if (user.staking_mode==='stw'){let raw=stwNum/(odds-1)||0;let sk=Math.round(raw);if(sk*(odds-1)<stwNum)sk++;recommendedNum=sk;}
-    else recommendedNum=Math.floor(((odds*pVal-1)/(odds-1))*bankrollNum*kellyPctNum);
-    const recommended=Number.isFinite(recommendedNum)?recommendedNum:0;
+    const bankrollNum = parseFloat(user.bankroll) || 0;
+    const kellyPctNum = Math.min(parseFloat(user.kelly_pct) || 0, 100) / 100;
+    const flatNum     = parseFloat(user.flat_stake)   || 0;
+    const stwNum      = parseFloat(user.stw_amount)   || 0;
 
-    const diff=process.hrtime(startTime);
-    console.log(`⏱️ [Timing] fetch+calc for ${discordId}, bet ${betId}: ${(diff[0]*1e3+diff[1]/1e6).toFixed(2)} ms`);
+    if (user.staking_mode === 'flat') {
+      recommendedNum = flatNum;
+    } else if (user.staking_mode === 'stw') {
+      let rawStw = stwNum / (odds - 1) || 0;
+      let sk     = Math.round(rawStw);
+      if (sk * (odds - 1) < stwNum) sk++;
+      recommendedNum = sk;
+    } else {
+      recommendedNum = Math.floor(
+        ((odds * pVal - 1) / (odds - 1)) * bankrollNum * kellyPctNum
+      );
+    }
 
-    const prevVal=await userService.getUserBetStake(discordId, betId);
-    const defaultOverride=(prevVal!=null&&!isNaN(prevVal))?parseFloat(prevVal).toFixed(2):'';
-	
-    // === NOTES ADDITION ===
-    const prevNotes = await userService.getUserBetNotes(discordId, betId);
-    const defaultNotes = prevNotes || '';
-    // === END NOTES ADDITION ===
-	
-	// === ODDS OVERRIDE ===
-	const prevOddsOverride    = await getUserBetOddsOverride(discordId, betId);
-	const defaultOddsOverride = prevOddsOverride != null ? prevOddsOverride.toFixed(2) : '';
-	// === ODDS OVERRIDE ===
+    const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
 
-    const modal=new ModalBuilder()
+    const diff = process.hrtime(startTime);
+    console.log(
+      `⏱️ [Timing] fetch+calc for ${discordId}, bet ${betId}: ` +
+      `${(diff[0] * 1e3 + diff[1] / 1e6).toFixed(2)} ms`
+    );
+
+    // ── Fetch previous user values ──
+    const prevVal  = await userService.getUserBetStake(discordId, betId);
+    const defaultOverride = (prevVal != null && !isNaN(prevVal))
+      ? parseFloat(prevVal).toFixed(2)
+      : '';
+
+    const prevNotes      = await userService.getUserBetNotes(discordId, betId);
+    const defaultNotes   = prevNotes || '';
+
+    const prevOddsOverride    = await getUserBetOddsOverride(discordId, betId);
+    const defaultOddsOverride = prevOddsOverride != null
+      ? prevOddsOverride.toFixed(2)
+      : '';
+
+    // ── Build and show modal ──
+    const modal = new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
       .setTitle('Your Stake Calculator')
       .addComponents(
@@ -296,16 +317,15 @@ client.on('interactionCreate', async interaction => {
             .setValue(defaultOverride)
             .setRequired(false)
         ),
-		// === ODDS OVERRIDE ===
-		new ActionRowBuilder().addComponents(
-		  new TextInputBuilder()
-			.setCustomId('oddsOverride')
-			.setLabel('Odds Override (optional)')
-			.setStyle(TextInputStyle.Short)
-			.setValue(defaultOddsOverride)
-			.setRequired(false)
-		),
-		// === END ODDS OVERRIDE ===
+        // === ODDS OVERRIDE ===
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('oddsOverride')
+            .setLabel('Odds Override (optional)')
+            .setStyle(TextInputStyle.Short)
+            .setValue(defaultOddsOverride)
+            .setRequired(false)
+        ),
         // === NOTES ADDITION ===
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
@@ -315,10 +335,11 @@ client.on('interactionCreate', async interaction => {
             .setValue(defaultNotes)
             .setRequired(false)
         )
-        // === END NOTES ADDITION ===
       );
+
     return interaction.showModal(modal);
   }
+});
 
 if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
   const betId     = interaction.customId.split('_')[1];
