@@ -363,8 +363,8 @@ if (interaction.type === InteractionType.ModalSubmit && interaction.customId.sta
 
   // Fetch previous override and settings
   const prevOddsOverride = await getUserBetOddsOverride(discordId, betId);   // === ODDS OVERRIDE ===
-  const userSettings     = await userService.getUserSettings(discordId);
-  const stakeType        = userSettings.stakingType;  // 'flat', 'kelly', 'stw'
+  const userSettings = await getUserSettings(discordId);
+  const stakeType    = userSettings.staking_mode;   // ← use the actual field name
 
   // === Branch by staking type ===
   // 1) Flat staking: ignore odds override, always log bet
