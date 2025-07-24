@@ -340,69 +340,96 @@ client.on('interactionCreate', async interaction => {
     return interaction.showModal(modal);
   }
 
-if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
-  const betId     = interaction.customId.split('_')[1];
+if (interaction.type === InteractionType.ModalSubmit
+    && interaction.customId.startsWith('stakeModalSubmit_')) {
+  // ── Normalize Bet ID ──
+  const raw     = interaction.customId.split('_')[1];
+  const betId   = raw.replace(/,/g, '');
   const discordId = interaction.user.id;
 
-  // Gather inputs
-  const recStr  = interaction.fields.getTextInputValue('recommended');
-  const overStr = interaction.fields.getTextInputValue('override');
-  const oddsStr = interaction.fields.getTextInputValue('oddsOverride');  // === ODDS OVERRIDE ===
-  const notesStr = interaction.fields.getTextInputValue('notes');      // === NOTES ===
+  // ── Gather inputs ──
+  const recStr     = interaction.fields.getTextInputValue('recommended');
+  const overStr    = interaction.fields.getTextInputValue('override');
+  const oddsStr    = interaction.fields.getTextInputValue('oddsOverride');  // === ODDS OVERRIDE ===
+  const notesStr   = interaction.fields.getTextInputValue('notes');
 
-  // Parse values
-  const finalStake         = parseFloat(overStr) || parseFloat(recStr);
-  const finalOddsOverride = oddsStr ? parseFloat(oddsStr) : null;         // === ODDS OVERRIDE ===
-	let originalOdds = 0;
-	if (global.masterBets) {
-	  const masterRow = global.masterBets.get(betId);
-	  if (masterRow) originalOdds = parseFloat(masterRow['Odds']) || 0;
-	  else console.warn(`No masterBets entry for ID ${betId}`);
-	}
-  const notes              = notesStr ?? '';
+  // ── Parse values ──
+  const baseStake        = parseFloat(overStr) || parseFloat(recStr);
+  const overrideOddsVal  = oddsStr ? parseFloat(oddsStr) : null;            // === ODDS OVERRIDE ===
+  const notes            = notesStr ?? '';
 
-  // Fetch previous override and settings
-  const prevOddsOverride = await getUserBetOddsOverride(discordId, betId);   // === ODDS OVERRIDE ===
-  const userSettings = await getUserSettings(discordId);
-  const stakeType    = userSettings.staking_mode;   // ← use the actual field name
+  // ── Fetch original odds & saved override ──
+  let originalOdds = 0;
+  if (global.masterBets) {
+    const masterRow = global.masterBets.get(betId);
+    if (masterRow) originalOdds = parseFloat(masterRow['Odds']) || 0;
+  }
+  const prevOverride  = await getUserBetOddsOverride(discordId, betId);      // === ODDS OVERRIDE ===
+  const useOdds       = prevOverride != null ? prevOverride : originalOdds;
 
-  // === Branch by staking type ===
-  // 1) Flat staking: ignore odds override, always log bet
+  // ── Build the correct recommended stake ──
+  const userSettings  = await getUserSettings(discordId);
+  const stakeType     = userSettings.staking_mode; // 'flat', 'kelly', 'stw'
+  const bankroll      = parseFloat(userSettings.bankroll) || 0;
+  const kellyPct      = Math.min(parseFloat(userSettings.kelly_pct)||0,100)/100;
+  const flatAmt       = parseFloat(userSettings.flat_stake) || 0;
+  const stwAmt        = parseFloat(userSettings.stw_amount) || 0;
+
+  let recommendedNum;
   if (stakeType === 'flat') {
-    await userService.saveUserBetStake(discordId, betId, finalStake, finalOddsOverride, notes);
+    recommendedNum = flatAmt;
+  } else if (stakeType === 'stw') {
+    // stake-to-win: calculate based on useOdds
+    let rawStw = stwAmt / (useOdds - 1) || 0;
+    let sk     = Math.round(rawStw);
+    if (sk * (useOdds - 1) < stwAmt) sk++;
+    recommendedNum = sk;
+  } else {
+    // Kelly
+    recommendedNum = Math.floor(
+      ((useOdds * (parseFloat(masterRow['Probability'])/ (masterRow['Probability']>1?100:1)) - 1)
+       / (useOdds - 1)) * bankroll * kellyPct
+    );
+  }
+  const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
+
+  // ── Branch by staking type & overrides ──
+  if (stakeType === 'flat') {
+    // flat staking: ignore override for logging
+    await userService.saveUserBetStake(discordId, betId, recommended, overrideOddsVal, notes);
     return interaction.reply({
-      content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`,
-      ephemeral: true
+      content: `💵 You’ve staked **£${recommended.toFixed(2)}** on Bet ${betId}`,
+      flags: 64
     });
   }
 
-  // 2) Stake-To-Win or Kelly flows
-  // a) First-time override
-  if ((stakeType === 'stw' || stakeType === 'kelly') && prevOddsOverride == null && finalOddsOverride !== null) {
-    await saveUserBetOddsOverride(discordId, betId, finalOddsOverride);               // === ODDS OVERRIDE ===
+  // STW/Kelly first-time override
+  if ((stakeType === 'stw' || stakeType === 'kelly')
+      && prevOverride == null && overrideOddsVal !== null) {
+    await saveUserBetOddsOverride(discordId, betId, overrideOddsVal);
     return interaction.reply({
-      content: `🔄 Odds override saved from **${originalOdds.toFixed(2)}** to **${finalOddsOverride.toFixed(2)}**. Please reopen to see your updated stake.`,
-      ephemeral: true
+      content: `🔄 Odds override saved from **${originalOdds.toFixed(2)}** to **${overrideOddsVal.toFixed(2)}**. Please reopen to see your updated stake.`,
+      flags: 64
     });
   }
 
-  // b) Subsequent override change
-  if ((stakeType === 'stw' || stakeType === 'kelly') && prevOddsOverride != null && finalOddsOverride !== prevOddsOverride) {
-    await saveUserBetOddsOverride(discordId, betId, finalOddsOverride);               // === ODDS OVERRIDE ===
+  // STW/Kelly subsequent override change
+  if ((stakeType === 'stw' || stakeType === 'kelly')
+      && prevOverride != null && overrideOddsVal !== prevOverride) {
+    await saveUserBetOddsOverride(discordId, betId, overrideOddsVal);
     return interaction.reply({
-      content: `🔄 Odds override updated from **${prevOddsOverride.toFixed(2)}** to **${finalOddsOverride.toFixed(2)}**. Please reopen to see the new stake.`,
-      ephemeral: true
+      content: `🔄 Odds override updated from **${prevOverride.toFixed(2)}** to **${overrideOddsVal.toFixed(2)}**. Please reopen to see the new stake.`,
+      flags: 64
     });
   }
 
-  // c) Ready to log bet (override unchanged or no override)
-  await userService.saveUserBetStake(discordId, betId, finalStake, finalOddsOverride, notes);     // === ODDS OVERRIDE ===
+  // c) Ready to log the bet
+  await userService.saveUserBetStake(discordId, betId, recommended, overrideOddsVal, notes);
   return interaction.reply({
-    content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`,
-    ephemeral: true
+    content: `💵 You’ve staked **£${recommended.toFixed(2)}** on Bet ${betId}`,
+    flags: 64
   });
 }
-});
 
 // Bot ready: preload settings, post new bets, schedule
 client.once('ready', async () => {
