@@ -355,6 +355,7 @@ if (interaction.type === InteractionType.ModalSubmit && interaction.customId.sta
     ephemeral: true
   });
 }
+});
 
 // Bot ready: preload settings, post new bets, schedule
 client.once('ready', async () => {
