@@ -148,6 +148,21 @@ const client = new Client({
  */
 async function processNewBets() {
   try {
+    // === MASTERBETS CACHE BUILD ===
+    const all         = await fetchAllMasterRows();
+    const header      = all[0] || [];
+    const dataRows    = all.slice(1);
+    global.masterBets = new Map(
+      dataRows.map(r => {
+        const obj = {};
+        header.forEach((col, i) => {
+          obj[col.trim()] = r[i];
+        });
+        const key = String(obj['Bet ID'] || '').replace(/,/g, '');
+        return [key, obj];
+      })
+    );
+    // === END CACHE BUILD ===
     const rows = await fetchAllMasterRows();
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
@@ -210,7 +225,8 @@ async function processNewBets() {
 // Interaction handler (buttons & modals)
 client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId.startsWith('stakeModal_')) {
-    const betId = interaction.customId.split('_')[1];
+	const raw = interaction.customId.split('_')[1];
+	const betId = raw.replace(/,/g, '');
     const discordId = interaction.user.id;
     const startTime = process.hrtime();
 
@@ -317,7 +333,12 @@ if (interaction.type === InteractionType.ModalSubmit && interaction.customId.sta
   // Parse values
   const finalStake         = parseFloat(overStr) || parseFloat(recStr);
   const finalOddsOverride = oddsStr ? parseFloat(oddsStr) : null;         // === ODDS OVERRIDE ===
-  const originalOdds = /* e.g. fetch from your cached masterBets map: */ global.masterBets.get(betId).odds;
+	let originalOdds = 0;
+	if (global.masterBets) {
+	  const masterRow = global.masterBets.get(betId);
+	  if (masterRow) originalOdds = parseFloat(masterRow['Odds']) || 0;
+	  else console.warn(`No masterBets entry for ID ${betId}`);
+	}
   const notes              = notesStr ?? '';
 
   // Fetch previous override and settings
