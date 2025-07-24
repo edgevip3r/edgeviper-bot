@@ -34,18 +34,34 @@ async function getUserBetStake(discordId, betId) {
 	  : null;
 }
 
+// === NOTES ADDITION ===
+/**
+ * Load existing notes for a user on a bet
+ */
+async function getUserBetNotes(discordId, betId) {
+  console.log(`🔍 [DB] getUserBetNotes for ${discordId}, bet ${betId}`);
+  const res = await db.query(
+    `SELECT notes FROM user_stakes WHERE discord_id = $1 AND bet_id = $2`,
+    [discordId, betId]
+  );
+  console.log('🔍 [DB] notes rows:', res.rows);
+  return res.rows[0]?.notes ?? null;
+}
+// === END NOTES ADDITION ===
+
 /**
  * Save or update the user's override stake for a specific bet
  */
-async function saveUserBetStake(discordId, betId, stake) {
-  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}`);
+async function saveUserBetStake(discordId, betId, stake, notes) {
+  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}, notes ${notes}`);
   await db.query(
-    `INSERT INTO user_stakes(discord_id, bet_id, stake, updated_at)
-     VALUES($1, $2, $3, NOW())
+    `INSERT INTO user_stakes(discord_id, bet_id, stake, notes, updated_at)
+     VALUES($1, $2, $3, $4, NOW())
      ON CONFLICT(discord_id, bet_id)
      DO UPDATE SET stake = EXCLUDED.stake,
+				   notes      = EXCLUDED.notes,
                    updated_at = EXCLUDED.updated_at`,
-    [discordId, betId, stake]
+    [discordId, betId, stake, notes]
   );
   console.log('💾 [DB] save complete');
 }
@@ -56,7 +72,7 @@ async function saveUserBetStake(discordId, betId, stake) {
 async function listUserStakes(discordId) {
   // console.log(`🔍 [DB] listUserStakes for ${discordId}`);
   const res = await db.query(
-    `SELECT bet_id, stake FROM user_stakes WHERE discord_id = $1`,
+    `SELECT bet_id, stake, notes FROM user_stakes WHERE discord_id = $1 ORDER BY bet_id DESC`,
     [discordId]
   );
   // console.log('🔍 [DB] stakes rows:', res.rows);
@@ -98,6 +114,7 @@ async function getAllUserSettings() {
 module.exports = {
   findByDiscordId,
   getUserBetStake,
+  getUserBetNotes,    // === NOTES ADDITION ===
   saveUserBetStake,
   listUserStakes,
   saveUserSettings,

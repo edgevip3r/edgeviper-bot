@@ -244,6 +244,11 @@ client.on('interactionCreate', async interaction => {
 
     const prevVal=await userService.getUserBetStake(discordId, betId);
     const defaultOverride=(prevVal!=null&&!isNaN(prevVal))?parseFloat(prevVal).toFixed(2):'';
+	
+    // === NOTES ADDITION ===
+    const prevNotes = await userService.getUserBetNotes(discordId, betId);
+    const defaultNotes = prevNotes || '';
+    // === END NOTES ADDITION ===
 
     const modal=new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
@@ -264,7 +269,17 @@ client.on('interactionCreate', async interaction => {
             .setStyle(TextInputStyle.Short)
             .setValue(defaultOverride)
             .setRequired(false)
+        ),
+        // === NOTES ADDITION ===
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('notes')
+            .setLabel('Notes (optional)')
+            .setStyle(TextInputStyle.Paragraph)
+            .setValue(defaultNotes)
+            .setRequired(false)
         )
+        // === END NOTES ADDITION ===
       );
     return interaction.showModal(modal);
   }
@@ -275,6 +290,11 @@ client.on('interactionCreate', async interaction => {
     const recStr=interaction.fields.getTextInputValue('recommended');
     const overStr=interaction.fields.getTextInputValue('override');
     const finalStake=parseFloat(overStr)||parseFloat(recStr);
+	
+    // === NOTES ADDITION ===
+    const notes = interaction.fields.getTextInputValue('notes');
+    // === END NOTES ADDITION ===
+	
     await userService.saveUserBetStake(discordId, betId, finalStake);
     return interaction.reply({ content:`💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`, flags:64 });
   }
