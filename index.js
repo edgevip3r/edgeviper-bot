@@ -23,19 +23,13 @@ const {
 
 // sheet helpers
 const { fetchAllMasterRows, markRowSend } = require('./sheets');
+
 // DB-backed user stakes & settings
+const userService = require('./services/userService');
 const {
-  getUserBetStake,
-  getUserBetNotes,
-  saveUserBetStake,
-  getUserBetOddsOverride,    // ← newly added
-  saveUserBetOddsOverride,   // ← newly added
-  getUserSettings,
-  listUserStakes,
-  saveUserSettings,
-  findByDiscordId,
-  getAllUserSettings
-} = require('./services/userService');
+  getUserBetOddsOverride,
+  saveUserBetOddsOverride
+} = userService;
 
 // Express for REST endpoints
 const app = express();
