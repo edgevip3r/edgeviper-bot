@@ -154,12 +154,20 @@ async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
 }
 // === END OVERRIDE SUPPORT ===
 
+// === ALIAS FOR USER SETTINGS ===
+async function getUserSettings(discordId) {
+  // simply reuse your existing REST fetch
+  return await findByDiscordId(discordId);
+}
+// === END ALIAS ===
+
 module.exports = {
   findByDiscordId,
+  getUserSettings,           // newly exported alias
   getUserBetStake,
   getUserBetOddsOverride,    // new
   saveUserBetOddsOverride,   // new
-  getUserBetNotes,    // === NOTES ADDITION ===
+  getUserBetNotes,           // notes
   saveUserBetStake,
   listUserStakes,
   saveUserSettings,
