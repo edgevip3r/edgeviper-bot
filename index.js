@@ -339,7 +339,6 @@ client.on('interactionCreate', async interaction => {
 
     return interaction.showModal(modal);
   }
-});
 
 if (interaction.type === InteractionType.ModalSubmit && interaction.customId.startsWith('stakeModalSubmit_')) {
   const betId     = interaction.customId.split('_')[1];
