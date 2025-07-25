@@ -251,7 +251,11 @@ client.on('interactionCreate', async interaction => {
     if (pVal > 1) pVal /= 100;
 
     // Pull any saved override and choose which odds to use
-    const prevOddsOverride = await getUserBetOddsOverride(discordId, betId);
+	const prevOddsOverride = await getUserBetOddsOverride(discordId, betId);
+	// prevOddsOverride is now a Number or null
+	const defaultOddsOverride = prevOddsOverride != null
+	  ? prevOddsOverride.toFixed(2)
+	  : '';
     const useOdds = prevOddsOverride != null ? prevOddsOverride : originalOdds;
 
     // Calculate recommended stake using useOdds
