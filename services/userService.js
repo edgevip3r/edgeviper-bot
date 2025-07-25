@@ -49,41 +49,22 @@ async function getUserBetNotes(discordId, betId) {
 }
 // === END NOTES ADDITION ===
 
-// === ODDS OVERRIDE ADDS ===
-async function getUserBetOddsOverride(discordId, betId) {
-  const res = await db.query(
-    'SELECT odds_override FROM user_stakes WHERE discord_id=$1 AND bet_id=$2',
-    [discordId, betId]
-  );
-  return res.rows[0]?.odds_override ?? null;
-}
-
-async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
-  await db.query(
-    `UPDATE user_stakes SET odds_override=$1, updated_at=NOW()
-      WHERE discord_id=$2 AND bet_id=$3`,
-    [oddsOverride, discordId, betId]
-  );
-}
-// === END ODDS OVERRIDE ADDS ===
-
 /**
  * Save or update the user's override stake for a specific bet
  */
-async function saveUserBetStake(discordId, betId, stake, oddsOverride, notes) {
-  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}, oddsOverride ${oddsOverride}, notes ${notes}`);
+async function saveUserBetStake(discordId, betId, stake, notes) {
+  console.log(`💾 [DB] saveUserBetStake for ${discordId}, bet ${betId}, stake ${stake}, notes ${notes}`);
   // === NOTES HANDLING ===
   notes = notes ?? '';
   // === END NOTES HANDLING ===
   await db.query(
-    `INSERT INTO user_stakes(discord_id, bet_id, stake, odds_override, notes, updated_at)
-     VALUES($1, $2, $3, $4, $5, NOW())
+    `INSERT INTO user_stakes(discord_id, bet_id, stake, notes, updated_at)
+     VALUES($1, $2, $3, $4, NOW())
      ON CONFLICT(discord_id, bet_id)
      DO UPDATE SET stake = EXCLUDED.stake,
-				   odds_override = EXCLUDED.odds_override,
 				   notes      = EXCLUDED.notes,
                    updated_at = EXCLUDED.updated_at`,
-    [discordId, betId, stake, oddsOverride, notes]
+    [discordId, betId, stake, notes]
   );
   console.log('💾 [DB] save complete');
 }
@@ -94,7 +75,7 @@ async function saveUserBetStake(discordId, betId, stake, oddsOverride, notes) {
 async function listUserStakes(discordId) {
   // console.log(`🔍 [DB] listUserStakes for ${discordId}`);
   const res = await db.query(
-    `SELECT bet_id, stake, odds_override, notes FROM user_stakes WHERE discord_id = $1 ORDER BY bet_id DESC`,
+    `SELECT bet_id, stake, notes FROM user_stakes WHERE discord_id = $1 ORDER BY bet_id DESC`,
     [discordId]
   );
   // console.log('🔍 [DB] stakes rows:', res.rows);
@@ -133,43 +114,10 @@ async function getAllUserSettings() {
   return res.rows;
 }
 
-// === ODDS OVERRIDE SUPPORT ===
-async function getUserBetOddsOverride(discordId, betId) {
-  const res = await db.query(
-    'SELECT odds_override FROM user_stakes WHERE discord_id=$1 AND bet_id=$2',
-    [discordId, betId]
-  );
-  const raw = res.rows[0]?.odds_override;
-  return raw != null ? parseFloat(raw) : null;
-}
-
-async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
-  await db.query(
-    `INSERT INTO user_stakes(discord_id, bet_id, odds_override, updated_at)
-      VALUES($1,$2,$3,NOW())
-     ON CONFLICT(discord_id,bet_id)
-     DO UPDATE SET
-       odds_override = EXCLUDED.odds_override,
-       updated_at    = EXCLUDED.updated_at`,
-    [discordId, betId, oddsOverride]
-  );
-}
-// === END OVERRIDE SUPPORT ===
-
-// === ALIAS FOR USER SETTINGS ===
-async function getUserSettings(discordId) {
-  // simply reuse your existing REST fetch
-  return await findByDiscordId(discordId);
-}
-// === END ALIAS ===
-
 module.exports = {
   findByDiscordId,
-  getUserSettings,           // newly exported alias
   getUserBetStake,
-  getUserBetOddsOverride,    // new
-  saveUserBetOddsOverride,   // new
-  getUserBetNotes,           // notes
+  getUserBetNotes,    // === NOTES ADDITION ===
   saveUserBetStake,
   listUserStakes,
   saveUserSettings,
