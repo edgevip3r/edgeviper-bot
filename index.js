@@ -290,11 +290,6 @@ client.on('interactionCreate', async interaction => {
     const prevNotes        = await userService.getUserBetNotes(discordId, betId);
     const defaultNotes     = prevNotes || '';
 
-    // Default text for odds-override textbox
-    const defaultOddsOverride = prevOddsOverride != null
-      ? prevOddsOverride.toFixed(2)
-      : '';
-
     // Build and show modal
     const modal = new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
