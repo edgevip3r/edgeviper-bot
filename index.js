@@ -354,6 +354,15 @@ client.on('interactionCreate', async interaction => {
     const finalStake        = parseFloat(overStr) || parseFloat(recStr);
     const finalOddsOverride = oddsStr ? parseFloat(oddsStr) : null;
     const notes             = notesStr ?? '';
+	
+	// ── Fetch original odds for feedback ──
+	let originalOdds = 0;
+	if (global.masterBets) {
+	  const masterRow = global.masterBets.get(betId);
+	  if (masterRow) {
+		originalOdds = parseFloat(masterRow['Odds']) || 0;
+	  }
+	}
 
     // (You already have originalOdds, prevOverride, useOdds logic if needed for messaging)
 
