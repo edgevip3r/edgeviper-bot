@@ -430,6 +430,7 @@ if (interaction.type === InteractionType.ModalSubmit
     flags: 64
   });
 }
+});
 
 // Bot ready: preload settings, post new bets, schedule
 client.once('ready', async () => {
