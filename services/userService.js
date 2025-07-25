@@ -144,12 +144,13 @@ async function getUserBetOddsOverride(discordId, betId) {
 
 async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
   await db.query(
-    `UPDATE user_stakes
-        SET odds_override = $1,
-            updated_at    = NOW()
-      WHERE discord_id = $2
-        AND bet_id     = $3`,
-    [oddsOverride, discordId, betId]
+    `INSERT INTO user_stakes(discord_id, bet_id, odds_override, updated_at)
+      VALUES($1,$2,$3,NOW())
+     ON CONFLICT(discord_id,bet_id)
+     DO UPDATE SET
+       odds_override = EXCLUDED.odds_override,
+       updated_at    = EXCLUDED.updated_at`,
+    [discordId, betId, oddsOverride]
   );
 }
 // === END OVERRIDE SUPPORT ===
