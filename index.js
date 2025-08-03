@@ -206,10 +206,13 @@ async function processNewBets() {
 client.on('interactionCreate', async interaction => {
   // ── BUTTON CLICK: build & show modal ──
   if (interaction.isButton() && interaction.customId.startsWith('stakeModal_')) {
-    const betId     = interaction.customId.split('_')[1];
+    // Normalize Bet ID (strip commas)
+    const raw       = interaction.customId.split('_')[1];
+    const betId     = raw.replace(/,/g, '');
     const discordId = interaction.user.id;
     const startTime = process.hrtime();
 
+    // Load user settings
     const user      = await getUserSettings(discordId);
     const fromCache = userSettingsCache.has(discordId);
     console.log(`🔍 [Settings] for ${discordId} loaded from ${fromCache ? 'cache' : 'source'}`);
@@ -218,66 +221,76 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({ content: '❗ Please link Discord first.', flags: 64 });
     }
 
-    // ── **FETCH & CACHE** the sheet rows ONCE ──
-    const all    = await fetchAllMasterRows();
+    // ── FETCH & CACHE the sheet rows ONCE ──
+    const all = await fetchAllMasterRows();
     masterHeader = all[0] || [];
 
-    // find the "Bet ID" column index (case-insensitive)
+    // Find the "Bet ID" column index (case-insensitive)
     const idxId = masterHeader.findIndex(h =>
       typeof h === 'string' && h.trim().toLowerCase() === 'bet id'
     );
+
+    // Build our map: cleanedBetId → row[]
     masterBetMap = new Map(
-      all.slice(1)
-         .filter(r => r[idxId] != null)
-         .map(r => [
-           // strip commas so "1,234" → "1234"
-           r[idxId].toString().replace(/,/g, ''), 
-           r 
-         ])
+      all
+        .slice(1)
+        .filter(r => r[idxId] != null)
+        .map(r => [
+          r[idxId].toString().replace(/,/g, ''),  // key
+          r                                       // value
+        ])
     );
 
-    // now use case‐insensitive for odds & probability
-    const header = masterHeader;
-    const idxO   = header.findIndex(h =>
+    // Lookup the exact row in our map
+    const row = masterBetMap.get(betId);
+    if (!row) {
+      console.warn(`No masterBetMap entry for ID ${betId}`);
+      return interaction.reply({ content: '❌ Bet not found.', flags: 64 });
+    }
+
+    // Find Odds & Probability column indices (case-insensitive)
+    const idxO = masterHeader.findIndex(h =>
       typeof h === 'string' && h.trim().toLowerCase() === 'odds'
     );
-    const idxP   = header.findIndex(h =>
+    const idxP = masterHeader.findIndex(h =>
       typeof h === 'string' && h.trim().toLowerCase() === 'probability'
     );
-    const row    = all.slice(1).find(r => 
-      r[idxId]?.toString().replace(/,/g,'') === betId
-    );
-    if (!row) return interaction.reply({ content: '❌ Bet not found.', flags: 64 });
 
+    // Parse odds & pVal
     const odds = parseFloat(row[idxO]) || 0;
     let   pVal = parseFloat(row[idxP]) || 0;
     if (pVal > 1) pVal /= 100;
 
+    // Calculate recommended stake
     let recommendedNum = 0;
-    const bankrollNum   = parseFloat(user.bankroll)  || 0;
-    const kellyPctNum   = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
-    const flatNum       = parseFloat(user.flat_stake) || 0;
-    const stwNum        = parseFloat(user.stw_amount) || 0;
-    if (user.staking_mode==='flat') {
+    const bankrollNum = parseFloat(user.bankroll)  || 0;
+    const kellyPctNum = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
+    const flatNum     = parseFloat(user.flat_stake) || 0;
+    const stwNum      = parseFloat(user.stw_amount) || 0;
+
+    if (user.staking_mode === 'flat') {
       recommendedNum = flatNum;
-    } else if (user.staking_mode==='stw') {
+    } else if (user.staking_mode === 'stw') {
       let raw = stwNum/(odds-1) || 0;
       let sk  = Math.round(raw);
       if (sk * (odds-1) < stwNum) sk++;
       recommendedNum = sk;
     } else {
       recommendedNum = Math.floor(
-        ((odds*pVal-1)/(odds-1))*bankrollNum*kellyPctNum
+        ((odds * pVal - 1) / (odds - 1)) * bankrollNum * kellyPctNum
       );
     }
+
     const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
 
+    // Timing log
     const diff = process.hrtime(startTime);
     console.log(
       `⏱️ [Timing] fetch+calc for ${discordId}, bet ${betId}: ` +
       `${(diff[0]*1e3 + diff[1]/1e6).toFixed(2)} ms`
     );
 
+    // Fetch any previously saved stake override & notes
     const prevVal            = await userService.getUserBetStake(discordId, betId);
     const defaultOverride    = (prevVal != null && !isNaN(prevVal))
       ? parseFloat(prevVal).toFixed(2)
@@ -288,15 +301,15 @@ client.on('interactionCreate', async interaction => {
       ? prevOddsOverride.toFixed(2)
       : '';
 
-    // === NOTES ADDITION ===
-    const prevNotes   = await userService.getUserBetNotes(discordId, betId);
+    const prevNotes    = await userService.getUserBetNotes(discordId, betId);
     const defaultNotes = prevNotes || '';
-    // === END NOTES ADDITION ===
 
+    // Build and show the modal
     const modal = new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
       .setTitle('Your Stake Calculator')
       .addComponents(
+        // Recommended
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('recommended')
@@ -305,6 +318,7 @@ client.on('interactionCreate', async interaction => {
             .setValue(recommended.toFixed(2))
             .setRequired(false)
         ),
+        // Actual Stake
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('override')
@@ -313,7 +327,7 @@ client.on('interactionCreate', async interaction => {
             .setValue(defaultOverride)
             .setRequired(false)
         ),
-        // === ODDS OVERRIDE ===
+        // Odds Override
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('oddsOverride')
@@ -322,7 +336,7 @@ client.on('interactionCreate', async interaction => {
             .setValue(defaultOddsOverride)
             .setRequired(false)
         ),
-        // === NOTES ADDITION ===
+        // Notes
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('notes')
@@ -331,8 +345,8 @@ client.on('interactionCreate', async interaction => {
             .setValue(defaultNotes)
             .setRequired(false)
         )
-        // === END NOTES ADDITION ===
       );
+
     return interaction.showModal(modal);
   }
 
