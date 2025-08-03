@@ -167,23 +167,19 @@ async function processNewBets() {
         ? ((odds / fairOdds) * 100).toFixed(2) + '%'
         : 'N/A';
 
-      // Build embed, making Bookie name a hyperlink if URL provided
+      // Build embed...
       const embed = new EmbedBuilder()
         .setColor('#2E7D32')
         .setTitle('💰 New Value Bet 💰')
         .setDescription(`**${sport}** — ${event}`)
         .addFields(
-          {
-            name: 'Bookie',
-            value: bookieUrl ? `[${bookie}](${bookieUrl})` : bookie,
-            inline: true
-          },
-          { name: 'Odds',        value: odds.toString(),          inline: true },
-          { name: 'Min Odds',    value: minOdds.toFixed(2),       inline: true },
-          { name: 'Bet',         value: betText,                  inline: false },
-          { name: 'Settles',     value: settleDate,              inline: true },
-          { name: 'Value %',     value: valuePct,                inline: true },
-          { name: 'Fair Odds',   value: fairOdds.toFixed(2),     inline: true }
+          { name: 'Bookie',    value: bookieUrl ? `[${bookie}](${bookieUrl})` : bookie, inline: true },
+          { name: 'Odds',      value: odds.toString(),    inline: true },
+          { name: 'Min Odds',  value: minOdds.toFixed(2), inline: true },
+          { name: 'Bet',       value: betText,            inline: false },
+          { name: 'Settles',   value: settleDate,         inline: true },
+          { name: 'Value %',   value: valuePct,           inline: true },
+          { name: 'Fair Odds', value: fairOdds.toFixed(2),inline: true }
         )
         .setTimestamp()
         .setFooter({ text: `Bet ID: ${betId}` });
@@ -225,16 +221,32 @@ client.on('interactionCreate', async interaction => {
     // ── **FETCH & CACHE** the sheet rows ONCE ──
     const all    = await fetchAllMasterRows();
     masterHeader = all[0] || [];
-    const idxId  = masterHeader.indexOf('Bet ID');
+
+    // find the "Bet ID" column index (case-insensitive)
+    const idxId = masterHeader.findIndex(h =>
+      typeof h === 'string' && h.trim().toLowerCase() === 'bet id'
+    );
     masterBetMap = new Map(
-      all.slice(1).map(r => [ r[idxId]?.toString(), r ])
+      all.slice(1)
+         .filter(r => r[idxId] != null)
+         .map(r => [
+           // strip commas so "1,234" → "1234"
+           r[idxId].toString().replace(/,/g, ''), 
+           r 
+         ])
     );
 
-    // continue building embed exactly as before…
+    // now use case‐insensitive for odds & probability
     const header = masterHeader;
-    const idxO   = header.indexOf('Odds');
-    const idxP   = header.indexOf('Probability');
-    const row    = all.slice(1).find(r => r[idxId]?.toString() === betId);
+    const idxO   = header.findIndex(h =>
+      typeof h === 'string' && h.trim().toLowerCase() === 'odds'
+    );
+    const idxP   = header.findIndex(h =>
+      typeof h === 'string' && h.trim().toLowerCase() === 'probability'
+    );
+    const row    = all.slice(1).find(r => 
+      r[idxId]?.toString().replace(/,/g,'') === betId
+    );
     if (!row) return interaction.reply({ content: '❌ Bet not found.', flags: 64 });
 
     const odds = parseFloat(row[idxO]) || 0;
@@ -324,7 +336,6 @@ client.on('interactionCreate', async interaction => {
     return interaction.showModal(modal);
   }
 
-
   // ── MODAL SUBMIT: handle values & saving ──
   if (
     interaction.type === InteractionType.ModalSubmit &&
@@ -336,7 +347,7 @@ client.on('interactionCreate', async interaction => {
     const recStr        = interaction.fields.getTextInputValue('recommended');
     const overStr       = interaction.fields.getTextInputValue('override');
     const oddsStr       = interaction.fields.getTextInputValue('oddsOverride');
-    const notesStr      = interaction.fields.getTextInputValue('notes') ?? '';
+    const notesStr      = interaction.fields.getTextInputValue('notes') || '';
 
     const finalStake        = parseFloat(overStr) || parseFloat(recStr);
     const finalOddsOverride = oddsStr ? parseFloat(oddsStr) : null;
@@ -345,7 +356,9 @@ client.on('interactionCreate', async interaction => {
     // ── Fetch original odds from in-memory cache ──
     let originalOdds = 0;
     if (masterHeader.length) {
-      const oddsIdx = masterHeader.indexOf('Odds');
+      const oddsIdx = masterHeader.findIndex(h =>
+        typeof h === 'string' && h.trim().toLowerCase() === 'odds'
+      );
       const mrow    = masterBetMap.get(betId);
       if (mrow) originalOdds = parseFloat(mrow[oddsIdx]) || 0;
     }
