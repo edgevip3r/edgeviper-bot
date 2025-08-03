@@ -258,36 +258,36 @@ client.on('interactionCreate', async interaction => {
 
     // Parse odds & pVal
     const odds = parseFloat(row[idxO]) || 0;
-    let pVal   = parseFloat(row[idxP]) || 0;
+    let   pVal = parseFloat(row[idxP]) || 0;
     if (pVal > 1) pVal /= 100;
 
-    // ←— pull any saved override and choose which odds to use
-    const prevOddsOverride = await userService.getUserBetOddsOverride(discordId, betId);
-    const useOdds = prevOddsOverride != null
-      ? prevOddsOverride
-      : odds;
+	const useOdds = prevOddsOverride != null
+	  ? prevOddsOverride
+	  : odds;
 
-    // now compute recommended using useOdds
-    let recommendedNum = 0;
-    const bankrollNum = parseFloat(user.bankroll)||0;
-    const kellyPctNum = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
-    const flatNum     = parseFloat(user.flat_stake)||0;
-    const stwNum      = parseFloat(user.stw_amount)||0;
+	// ── Now calculate recommended stake using useOdds ──
+	let recommendedNum = 0;
+	const bankrollNum = parseFloat(user.bankroll)  || 0;
+	const kellyPctNum = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
+	const flatNum     = parseFloat(user.flat_stake) || 0;
+	const stwNum      = parseFloat(user.stw_amount) || 0;
 
-    if (user.staking_mode === 'flat') {
-      recommendedNum = flatNum;
-    } else if (user.staking_mode === 'stw') {
-      let raw = stwNum/(useOdds - 1) || 0;
-      let sk  = Math.round(raw);
-      if (sk * (useOdds - 1) < stwNum) sk++;
-      recommendedNum = sk;
-    } else {
-      recommendedNum = Math.floor(
-        ((useOdds * pVal - 1) / (useOdds - 1)) * bankrollNum * kellyPctNum
-      );
-    }
+	if (user.staking_mode === 'flat') {
+	  recommendedNum = flatNum;
+	}
+	else if (user.staking_mode === 'stw') {
+	  let raw = stwNum / (useOdds - 1) || 0;
+	  let sk  = Math.round(raw);
+	  if (sk * (useOdds - 1) < stwNum) sk++;
+	  recommendedNum = sk;
+	}
+	else {
+	  recommendedNum = Math.floor(
+		((useOdds * pVal - 1) / (useOdds - 1)) * bankrollNum * kellyPctNum
+	  );
+	}
 
-    const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
+	const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
 
     // Timing log
     const diff = process.hrtime(startTime);
