@@ -261,33 +261,35 @@ client.on('interactionCreate', async interaction => {
     let   pVal = parseFloat(row[idxP]) || 0;
     if (pVal > 1) pVal /= 100;
 
-	const useOdds = prevOddsOverride != null
-	  ? prevOddsOverride
-	  : odds;
+    // === ODDS OVERRIDE: fetch before calculating stake ===
+    const prevOddsOverride   = await userService.getUserBetOddsOverride(discordId, betId);
+    const useOdds = prevOddsOverride != null
+      ? prevOddsOverride
+      : odds;
 
-	// ── Now calculate recommended stake using useOdds ──
-	let recommendedNum = 0;
-	const bankrollNum = parseFloat(user.bankroll)  || 0;
-	const kellyPctNum = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
-	const flatNum     = parseFloat(user.flat_stake) || 0;
-	const stwNum      = parseFloat(user.stw_amount) || 0;
+    // ── Now calculate recommended stake using useOdds ──
+    let recommendedNum = 0;
+    const bankrollNum = parseFloat(user.bankroll)  || 0;
+    const kellyPctNum = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
+    const flatNum     = parseFloat(user.flat_stake) || 0;
+    const stwNum      = parseFloat(user.stw_amount) || 0;
 
-	if (user.staking_mode === 'flat') {
-	  recommendedNum = flatNum;
-	}
-	else if (user.staking_mode === 'stw') {
-	  let raw = stwNum / (useOdds - 1) || 0;
-	  let sk  = Math.round(raw);
-	  if (sk * (useOdds - 1) < stwNum) sk++;
-	  recommendedNum = sk;
-	}
-	else {
-	  recommendedNum = Math.floor(
-		((useOdds * pVal - 1) / (useOdds - 1)) * bankrollNum * kellyPctNum
-	  );
-	}
+    if (user.staking_mode === 'flat') {
+      recommendedNum = flatNum;
+    }
+    else if (user.staking_mode === 'stw') {
+      let raw = stwNum / (useOdds - 1) || 0;
+      let sk  = Math.round(raw);
+      if (sk * (useOdds - 1) < stwNum) sk++;
+      recommendedNum = sk;
+    }
+    else {
+      recommendedNum = Math.floor(
+        ((useOdds * pVal - 1) / (useOdds - 1)) * bankrollNum * kellyPctNum
+      );
+    }
 
-	const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
+    const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
 
     // Timing log
     const diff = process.hrtime(startTime);
@@ -302,7 +304,6 @@ client.on('interactionCreate', async interaction => {
       ? parseFloat(prevVal).toFixed(2)
       : '';
 
-    const prevOddsOverride   = await userService.getUserBetOddsOverride(discordId, betId);
     const defaultOddsOverride = prevOddsOverride != null
       ? prevOddsOverride.toFixed(2)
       : '';
