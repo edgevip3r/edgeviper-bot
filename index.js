@@ -37,6 +37,10 @@ const userSettingsCache = new Map();
 // Redis set key for posted bets dedupe
 const POSTED_BET_SET = 'postedBets';
 
+// In-memory cache of sheet header and rows for ModalSubmit
+let masterHeader = [];
+let masterBetMap = new Map();
+
 /**
  * Endpoint: fetch user stakes (for My Bets page)
  */
@@ -204,12 +208,13 @@ async function processNewBets() {
 
 // Interaction handler (buttons & modals)
 client.on('interactionCreate', async interaction => {
+  // ── BUTTON CLICK: build & show modal ──
   if (interaction.isButton() && interaction.customId.startsWith('stakeModal_')) {
-    const betId = interaction.customId.split('_')[1];
+    const betId     = interaction.customId.split('_')[1];
     const discordId = interaction.user.id;
     const startTime = process.hrtime();
 
-    const user = await getUserSettings(discordId);
+    const user      = await getUserSettings(discordId);
     const fromCache = userSettingsCache.has(discordId);
     console.log(`🔍 [Settings] for ${discordId} loaded from ${fromCache ? 'cache' : 'source'}`);
 
@@ -217,9 +222,16 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({ content: '❗ Please link Discord first.', flags: 64 });
     }
 
+    // ── **FETCH & CACHE** the sheet rows ONCE ──
     const all    = await fetchAllMasterRows();
-    const header = all[0] || [];
-    const idxId  = header.indexOf('Bet ID');
+    masterHeader = all[0] || [];
+    const idxId  = masterHeader.indexOf('Bet ID');
+    masterBetMap = new Map(
+      all.slice(1).map(r => [ r[idxId]?.toString(), r ])
+    );
+
+    // continue building embed exactly as before…
+    const header = masterHeader;
     const idxO   = header.indexOf('Odds');
     const idxP   = header.indexOf('Probability');
     const row    = all.slice(1).find(r => r[idxId]?.toString() === betId);
@@ -230,32 +242,46 @@ client.on('interactionCreate', async interaction => {
     if (pVal > 1) pVal /= 100;
 
     let recommendedNum = 0;
-    const bankrollNum = parseFloat(user.bankroll)||0;
-    const kellyPctNum = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
-    const flatNum     = parseFloat(user.flat_stake)||0;
-    const stwNum      = parseFloat(user.stw_amount)||0;
-    if (user.staking_mode==='flat') recommendedNum=flatNum;
-    else if (user.staking_mode==='stw'){let raw=stwNum/(odds-1)||0;let sk=Math.round(raw);if(sk*(odds-1)<stwNum)sk++;recommendedNum=sk;}
-    else recommendedNum=Math.floor(((odds*pVal-1)/(odds-1))*bankrollNum*kellyPctNum);
-    const recommended=Number.isFinite(recommendedNum)?recommendedNum:0;
+    const bankrollNum   = parseFloat(user.bankroll)  || 0;
+    const kellyPctNum   = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
+    const flatNum       = parseFloat(user.flat_stake) || 0;
+    const stwNum        = parseFloat(user.stw_amount) || 0;
+    if (user.staking_mode==='flat') {
+      recommendedNum = flatNum;
+    } else if (user.staking_mode==='stw') {
+      let raw = stwNum/(odds-1) || 0;
+      let sk  = Math.round(raw);
+      if (sk * (odds-1) < stwNum) sk++;
+      recommendedNum = sk;
+    } else {
+      recommendedNum = Math.floor(
+        ((odds*pVal-1)/(odds-1))*bankrollNum*kellyPctNum
+      );
+    }
+    const recommended = Number.isFinite(recommendedNum) ? recommendedNum : 0;
 
-    const diff=process.hrtime(startTime);
-    console.log(`⏱️ [Timing] fetch+calc for ${discordId}, bet ${betId}: ${(diff[0]*1e3+diff[1]/1e6).toFixed(2)} ms`);
+    const diff = process.hrtime(startTime);
+    console.log(
+      `⏱️ [Timing] fetch+calc for ${discordId}, bet ${betId}: ` +
+      `${(diff[0]*1e3 + diff[1]/1e6).toFixed(2)} ms`
+    );
 
-    const prevVal=await userService.getUserBetStake(discordId, betId);
-    const defaultOverride=(prevVal!=null&&!isNaN(prevVal))?parseFloat(prevVal).toFixed(2):'';
-	
-	const prevOddsOverride    = await userService.getUserBetOddsOverride(discordId, betId);
-	const defaultOddsOverride = prevOddsOverride != null
-	  ? prevOddsOverride.toFixed(2)
-	  : '';
-	
+    const prevVal            = await userService.getUserBetStake(discordId, betId);
+    const defaultOverride    = (prevVal != null && !isNaN(prevVal))
+      ? parseFloat(prevVal).toFixed(2)
+      : '';
+
+    const prevOddsOverride   = await userService.getUserBetOddsOverride(discordId, betId);
+    const defaultOddsOverride = prevOddsOverride != null
+      ? prevOddsOverride.toFixed(2)
+      : '';
+
     // === NOTES ADDITION ===
-    const prevNotes = await userService.getUserBetNotes(discordId, betId);
+    const prevNotes   = await userService.getUserBetNotes(discordId, betId);
     const defaultNotes = prevNotes || '';
     // === END NOTES ADDITION ===
 
-    const modal=new ModalBuilder()
+    const modal = new ModalBuilder()
       .setCustomId(`stakeModalSubmit_${betId}`)
       .setTitle('Your Stake Calculator')
       .addComponents(
@@ -275,16 +301,15 @@ client.on('interactionCreate', async interaction => {
             .setValue(defaultOverride)
             .setRequired(false)
         ),
-		// === ODDS OVERRIDE ===
-		new ActionRowBuilder().addComponents(
-		  new TextInputBuilder()
-			.setCustomId('oddsOverride')
-			.setLabel('Odds Override (optional)')
-			.setStyle(TextInputStyle.Short)
-			.setValue(defaultOddsOverride)
-			.setRequired(false)
-		),
-		// === END ODDS OVERRIDE ===
+        // === ODDS OVERRIDE ===
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('oddsOverride')
+            .setLabel('Odds Override (optional)')
+            .setStyle(TextInputStyle.Short)
+            .setValue(defaultOddsOverride)
+            .setRequired(false)
+        ),
         // === NOTES ADDITION ===
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
@@ -299,72 +324,74 @@ client.on('interactionCreate', async interaction => {
     return interaction.showModal(modal);
   }
 
-	if (
-	  interaction.type === InteractionType.ModalSubmit &&
-	  interaction.customId.startsWith('stakeModalSubmit_')
-	) {
-	  // ── Normalize IDs & gather inputs ──
-	  const raw           = interaction.customId.split('_')[1];
-	  const betId         = raw.replace(/,/g, '');
-	  const discordId     = interaction.user.id;
-	  const recStr        = interaction.fields.getTextInputValue('recommended');
-	  const overStr       = interaction.fields.getTextInputValue('override');
-	  const oddsStr       = interaction.fields.getTextInputValue('oddsOverride');
-	  const notesStr      = interaction.fields.getTextInputValue('notes') ?? '';
 
-	  // ── Parse values ──
-	  const finalStake        = parseFloat(overStr) || parseFloat(recStr);
-	  const finalOddsOverride = oddsStr ? parseFloat(oddsStr) : null;
-	  const notes             = notesStr;
+  // ── MODAL SUBMIT: handle values & saving ──
+  if (
+    interaction.type === InteractionType.ModalSubmit &&
+    interaction.customId.startsWith('stakeModalSubmit_')
+  ) {
+    const raw           = interaction.customId.split('_')[1];
+    const betId         = raw.replace(/,/g, '');
+    const discordId     = interaction.user.id;
+    const recStr        = interaction.fields.getTextInputValue('recommended');
+    const overStr       = interaction.fields.getTextInputValue('override');
+    const oddsStr       = interaction.fields.getTextInputValue('oddsOverride');
+    const notesStr      = interaction.fields.getTextInputValue('notes') ?? '';
 
-	  // ── Fetch original odds for messages ──
-	  let originalOdds = 0;
-	  if (global.masterBets) {
-		const mr = global.masterBets.get(betId);
-		if (mr) originalOdds = parseFloat(mr['Odds']) || 0;
-	  }
+    const finalStake        = parseFloat(overStr) || parseFloat(recStr);
+    const finalOddsOverride = oddsStr ? parseFloat(oddsStr) : null;
+    const notes             = notesStr;
 
-	  // ── Fetch previous override & user settings ──
-	  const prevOverride = await userService.getUserBetOddsOverride(discordId, betId);
-	  const settings     = await getUserSettings(discordId);
-	  const mode         = settings.staking_mode; // 'flat', 'stw', or 'kelly'
+    // ── Fetch original odds from in-memory cache ──
+    let originalOdds = 0;
+    if (masterHeader.length) {
+      const oddsIdx = masterHeader.indexOf('Odds');
+      const mrow    = masterBetMap.get(betId);
+      if (mrow) originalOdds = parseFloat(mrow[oddsIdx]) || 0;
+    }
 
-	  // ── 1) Flat staking: save override (to persist) but ignore for stake calc ──
-	  if (mode === 'flat') {
-		await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);
-		await userService.saveUserBetStake(discordId, betId, finalStake, notes);
-		return interaction.reply({
-		  content: `💵 You’ve staked **£${finalStake.toFixed(2)}** (odds unchanged)`,
-		  flags: 64
-		});
-	  }
+    const prevOverride = await userService.getUserBetOddsOverride(discordId, betId);
+    const settings     = await getUserSettings(discordId);
+    const mode         = settings.staking_mode; // 'flat', 'stw', or 'kelly'
 
-	  // ── 2a) STW/Kelly: first‐time override ──
-	  if ((mode === 'stw' || mode === 'kelly') && prevOverride == null && finalOddsOverride !== null) {
-		await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);
-		return interaction.reply({
-		  content: `🔄 Odds override saved (was **${originalOdds.toFixed(2)}**, now **${finalOddsOverride.toFixed(2)}**). Re-open to see new stake.`,
-		  flags: 64
-		});
-	  }
+    // 1) Flat staking: save override & stake at once
+    if (mode === 'flat') {
+      await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);
+      await userService.saveUserBetStake(discordId, betId, finalStake, notes);
+      return interaction.reply({
+        content: `💵 You’ve staked **£${finalStake.toFixed(2)}** (odds unchanged)`,
+        flags: 64
+      });
+    }
 
-	  // ── 2b) STW/Kelly: subsequent override change ──
-	  if ((mode === 'stw' || mode === 'kelly') && prevOverride != null && finalOddsOverride !== prevOverride) {
-		await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);
-		return interaction.reply({
-		  content: `🔄 Odds override updated (from **${prevOverride.toFixed(2)}** to **${finalOddsOverride.toFixed(2)}**). Re-open for updated stake.`,
-		  flags: 64
-		});
-	  }
+    // 2a) STW/Kelly first-time override
+    if ((mode === 'stw' || mode === 'kelly') &&
+        prevOverride == null && finalOddsOverride !== null) {
+      await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);
+      return interaction.reply({
+        content: `🔄 Odds override saved (was **${originalOdds.toFixed(2)}**, now **${finalOddsOverride.toFixed(2)}**). Re-open to see new stake.`,
+        flags: 64
+      });
+    }
 
-	  // ── 3) Ready to log bet: persist override + stake ──
-	  await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);
-	  await userService.saveUserBetStake(discordId, betId, finalStake, notes);
-	  return interaction.reply({
-		content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`,
-		flags: 64
-	  });
-	}
+    // 2b) STW/Kelly subsequent override change
+    if ((mode === 'stw' || mode === 'kelly') &&
+        prevOverride != null && finalOddsOverride !== prevOverride) {
+      await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);
+      return interaction.reply({
+        content: `🔄 Odds override updated (from **${prevOverride.toFixed(2)}** to **${finalOddsOverride.toFixed(2)}**). Re-open for updated stake.`,
+        flags: 64
+      });
+    }
+
+    // 3) Ready to log bet: persist override + stake
+    await userService.saveUserBetOddsOverride(discordId, betId, finalOddsOverride);
+    await userService.saveUserBetStake(discordId, betId, finalStake, notes);
+    return interaction.reply({
+      content: `💵 You’ve staked **£${finalStake.toFixed(2)}** on Bet ${betId}`,
+      flags: 64
+    });
+  }
 });
 
 // Bot ready: preload settings, post new bets, schedule
