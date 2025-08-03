@@ -245,7 +245,7 @@ client.on('interactionCreate', async interaction => {
     const prevVal=await userService.getUserBetStake(discordId, betId);
     const defaultOverride=(prevVal!=null&&!isNaN(prevVal))?parseFloat(prevVal).toFixed(2):'';
 	
-	const prevOddsOverride    = await getUserBetOddsOverride(discordId, betId);
+	const prevOddsOverride    = await userService.getUserBetOddsOverride(discordId, betId);
 	const defaultOddsOverride = prevOddsOverride != null
 	  ? prevOddsOverride.toFixed(2)
 	  : '';
