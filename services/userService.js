@@ -71,7 +71,7 @@ async function saveUserBetStake(discordId, betId, stake, notes) {
 
 // Fetch the odds_override (string or null) for a user+bet
 async function getUserBetOddsOverride(discordId, betId) {
-  const res = await pool.query(
+  const res = await db.query(
     `SELECT odds_override
        FROM user_stakes
       WHERE discord_id = $1
@@ -84,7 +84,7 @@ async function getUserBetOddsOverride(discordId, betId) {
 // Save or update only the odds_override column
 async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
   // either update existing row…
-  const update = await pool.query(
+  const update = await db.query(
     `UPDATE user_stakes
         SET odds_override = $3
       WHERE discord_id = $1
@@ -95,7 +95,7 @@ async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
   if ( update.rowCount ) return;
 
   // …or insert a new row (with null stake, notes) if none existed
-  await pool.query(
+  await db.query(
     `INSERT INTO user_stakes(discord_id, bet_id, stake, notes, odds_override, updated_at)
      VALUES($1,$2,NULL,'',$3,NOW())`,
     [discordId, betId, oddsOverride]
