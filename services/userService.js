@@ -72,13 +72,11 @@ async function saveUserBetStake(discordId, betId, stake, notes) {
 // Fetch the odds_override (string or null) for a user+bet
 async function getUserBetOddsOverride(discordId, betId) {
   const res = await db.query(
-    `SELECT odds_override
-       FROM user_stakes
-      WHERE discord_id = $1
-        AND bet_id     = $2`,
+    'SELECT odds_override FROM user_stakes WHERE discord_id = $1 AND bet_id = $2',
     [discordId, betId]
   );
-  return res.rows[0]?.odds_override ?? null;
+  const val = res.rows[0]?.odds_override;
+  return val != null ? parseFloat(val) : null;
 }
 
 // Save or update only the odds_override column
