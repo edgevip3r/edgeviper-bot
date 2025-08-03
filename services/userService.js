@@ -69,6 +69,39 @@ async function saveUserBetStake(discordId, betId, stake, notes) {
   console.log('💾 [DB] save complete');
 }
 
+// Fetch the odds_override (string or null) for a user+bet
+async function getUserBetOddsOverride(discordId, betId) {
+  const res = await pool.query(
+    `SELECT odds_override
+       FROM user_stakes
+      WHERE discord_id = $1
+        AND bet_id     = $2`,
+    [discordId, betId]
+  );
+  return res.rows[0]?.odds_override ?? null;
+}
+
+// Save or update only the odds_override column
+async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
+  // either update existing row…
+  const update = await pool.query(
+    `UPDATE user_stakes
+        SET odds_override = $3
+      WHERE discord_id = $1
+        AND bet_id     = $2
+      RETURNING *`,
+    [discordId, betId, oddsOverride]
+  );
+  if ( update.rowCount ) return;
+
+  // …or insert a new row (with null stake, notes) if none existed
+  await pool.query(
+    `INSERT INTO user_stakes(discord_id, bet_id, stake, notes, odds_override, updated_at)
+     VALUES($1,$2,NULL,'',$3,NOW())`,
+    [discordId, betId, oddsOverride]
+  );
+}
+
 /**
  * List all stakes for a given Discord ID
  */
@@ -112,13 +145,15 @@ async function getAllUserSettings() {
     `SELECT discord_id, staking_mode, bankroll, kelly_pct, flat_stake, stw_amount FROM user_settings`);
   console.log('🔍 [DB] all settings rows:', res.rows.length);
   return res.rows;
-}
+}	
 
 module.exports = {
   findByDiscordId,
   getUserBetStake,
   getUserBetNotes,    // === NOTES ADDITION ===
   saveUserBetStake,
+  getUserBetOddsOverride,
+  saveUserBetOddsOverride,
   listUserStakes,
   saveUserSettings,
   getAllUserSettings
