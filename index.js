@@ -258,26 +258,32 @@ client.on('interactionCreate', async interaction => {
 
     // Parse odds & pVal
     const odds = parseFloat(row[idxO]) || 0;
-    let   pVal = parseFloat(row[idxP]) || 0;
+    let pVal   = parseFloat(row[idxP]) || 0;
     if (pVal > 1) pVal /= 100;
 
-    // Calculate recommended stake
+    // ←— pull any saved override and choose which odds to use
+    const prevOddsOverride = await userService.getUserBetOddsOverride(discordId, betId);
+    const useOdds = prevOddsOverride != null
+      ? prevOddsOverride
+      : odds;
+
+    // now compute recommended using useOdds
     let recommendedNum = 0;
-    const bankrollNum = parseFloat(user.bankroll)  || 0;
+    const bankrollNum = parseFloat(user.bankroll)||0;
     const kellyPctNum = Math.min(parseFloat(user.kelly_pct)||0,100)/100;
-    const flatNum     = parseFloat(user.flat_stake) || 0;
-    const stwNum      = parseFloat(user.stw_amount) || 0;
+    const flatNum     = parseFloat(user.flat_stake)||0;
+    const stwNum      = parseFloat(user.stw_amount)||0;
 
     if (user.staking_mode === 'flat') {
       recommendedNum = flatNum;
     } else if (user.staking_mode === 'stw') {
-      let raw = stwNum/(odds-1) || 0;
+      let raw = stwNum/(useOdds - 1) || 0;
       let sk  = Math.round(raw);
-      if (sk * (odds-1) < stwNum) sk++;
+      if (sk * (useOdds - 1) < stwNum) sk++;
       recommendedNum = sk;
     } else {
       recommendedNum = Math.floor(
-        ((odds * pVal - 1) / (odds - 1)) * bankrollNum * kellyPctNum
+        ((useOdds * pVal - 1) / (useOdds - 1)) * bankrollNum * kellyPctNum
       );
     }
 
