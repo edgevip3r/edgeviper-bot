@@ -168,21 +168,29 @@ async function processNewBets() {
         : 'N/A';
 
       // Build embed...
-      const embed = new EmbedBuilder()
-        .setColor('#2E7D32')
-        .setTitle('💰 New Value Bet 💰')
-        .setDescription(`**${sport}** — ${event}`)
-        .addFields(
-          { name: 'Bookie',    value: bookieUrl ? `[${bookie}](${bookieUrl})` : bookie, inline: true },
-          { name: 'Odds',      value: odds.toString(),    inline: true },
-          { name: 'Min Odds',  value: minOdds.toFixed(2), inline: true },
-          { name: 'Bet',       value: betText,            inline: false },
-          { name: 'Settles',   value: settleDate,         inline: true },
-          { name: 'Value %',   value: valuePct,           inline: true },
-          { name: 'Fair Odds', value: fairOdds.toFixed(2),inline: true }
-        )
-        .setTimestamp()
-        .setFooter({ text: `Bet ID: ${betId}` });
+	const isArb = /\(ARB\)/i.test(betText);                             // 1) detect
+	const cleanBet = betText.replace(/\s*\(ARB\)\s*/gi, '').trim();    // 2) strip out
+	const embedColor = isArb ? '#F1C40F' : '#2E7D32';                  // 3) yellow vs green
+
+	const embed = new EmbedBuilder()
+	  .setColor(embedColor)
+	  .setTitle('💰 New Value Bet 💰')
+	  .setDescription(`**${sport}** — ${event}`)
+	  .addFields(
+		{
+		  name: 'Bookie',
+		  value: bookieUrl ? `[${bookie}](${bookieUrl})` : bookie,
+		  inline: true
+		},
+		{ name: 'Odds',     value: odds.toString(),      inline: true },
+		{ name: 'Min Odds', value: minOdds.toFixed(2),   inline: true },
+		{ name: 'Bet',      value: cleanBet,             inline: false },
+		{ name: 'Settles',  value: settleDate,           inline: true },
+		{ name: 'Value %',  value: valuePct,             inline: true },
+		{ name: 'Fair Odds',value: fairOdds.toFixed(2),  inline: true }
+	  )
+	  .setTimestamp()
+	  .setFooter({ text: `Bet ID: ${betId}` });
 
       const actionRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
