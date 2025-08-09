@@ -106,10 +106,7 @@ async function saveUserBetOddsOverride(discordId, betId, oddsOverride) {
 async function listUserStakes(discordId) {
   // console.log(`🔍 [DB] listUserStakes for ${discordId}`);
   const res = await db.query(
-	`SELECT bet_id, stake, notes, odds_override
-	 FROM user_stakes
-	 WHERE discord_id = $1
-	 ORDER BY bet_id DESC`,
+    `SELECT bet_id, stake, notes FROM user_stakes WHERE discord_id = $1 ORDER BY bet_id DESC`,
     [discordId]
   );
   // console.log('🔍 [DB] stakes rows:', res.rows);
