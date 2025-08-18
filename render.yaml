@@ -1,0 +1,5 @@
+services:
+  - type: private_service
+    name: edgeviper-pgbouncer
+    healthCheck:
+      enabled: false
