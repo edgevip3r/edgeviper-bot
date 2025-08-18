@@ -1,14 +1,11 @@
 // File: sheets.js
 const { google } = require('googleapis');
-const creds = require('./credentials.json');      // ← your service account key
-
 let sheetsClient;
 
 async function getSheetsClient() {
   if (sheetsClient) return sheetsClient;
 
   const auth = new google.auth.GoogleAuth({
-    credentials: creds,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 
@@ -31,18 +28,19 @@ async function fetchAllMasterRows() {
 /**
  * Fetch only new bets marked "S" for sending.
  * Returns [headerRow, ...rowsWithSendS]
+ *
+ * IMPORTANT: This preserves your original behaviour exactly
+ * (fixed J column = index 9, no header sniffing).
  */
 async function fetchNewBets() {
   const all = await fetchAllMasterRows();
   const header = all[0] || [];
-  const body   = (all.slice(1) || []).filter(r => r[9] === 'S');
+  const body   = (all.slice(1) || []).filter(r => r && r[9] === 'S');
   return [header, ...body];
 }
 
 /**
- * Marks a given row’s Send-column cell to a new value.
- * @param {number} rowIndex  0-based index into the fetched array (so +1 for sheet)
- * @param {string} newVal    the value to write (e.g. "P")
+ * Marks a given MasterBets row index (1-based in Google Sheets UI) as sent with value newVal.
  */
 async function markRowSend(rowIndex, newVal) {
   const sheets = await getSheetsClient();
