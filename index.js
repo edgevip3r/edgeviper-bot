@@ -83,6 +83,8 @@ app.post('/discord-role', async (req, res) => {
  * Webhook: settings updates from WordPress
  */
 app.post('/settings-updated', async (req, res) => {
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '');
+  if (token !== WEBHOOK_KEY) return res.status(401).send('Unauthorized');
   try {
     const { discord_id, staking_mode, bankroll, kelly_pct, flat_stake, stw_amount } = req.body;
     const settings = { staking_mode, bankroll, kelly_pct, flat_stake, stw_amount };
