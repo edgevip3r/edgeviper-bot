@@ -10,14 +10,14 @@ add_action( 'wp_enqueue_scripts', function() {
 });
 
 // Discord integration constants
-define('EV_DISCORD_CLIENT_ID',    '1386802909320052787');
-define('EV_DISCORD_CLIENT_SECRET','y-enQ-jXAEgi7hjjfLq0ljR5NI9DsUkF');
+define('EV_DISCORD_CLIENT_ID',    'NEED_TO_HIDE');
+define('EV_DISCORD_CLIENT_SECRET','NEED_TO_HIDE');
 define('EV_DISCORD_REDIRECT_URI',  home_url('/discord-callback'));
-define('EV_DISCORD_GUILD',        '1386808799654055967');
-define('EV_DISCORD_ROLE',         '1387055363609723011');
+define('EV_DISCORD_GUILD',        'NEED_TO_HIDE');
+define('EV_DISCORD_ROLE',         'NEED_TO_HIDE');
 define('EV_BOT_API_URL',          'https://edgeviper-bot.onrender.com/discord-role');
-define('EV_BOT_API_KEY',          '982398hrhiu24988h49u29hgf08942ij');
-define('EV_DISCORD_BOT_TOKEN',    'MTM4NjgwMjkwOTMyMDA1Mjc4Nw.G1CACq.A6CEVm37exA6cD0kPWy7H89tTDI_vZFJeepLWk');
+define('EV_BOT_API_KEY',          'NEED_TO_HIDE');
+define('EV_DISCORD_BOT_TOKEN',    'NEED_TO_HIDE');
 
 // ——————————————————————————————
 // TEMP: simulate subscription create via URL
