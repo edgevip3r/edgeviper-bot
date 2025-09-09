@@ -58,7 +58,6 @@ app.get('/api/user-stakes', async (req, res) => {
   }
 });
 
-
 /**
  * Endpoint: Discord role sync (add/remove) + invite-and-role
  * Auth: Authorization: Bearer <BOT_WEBHOOK_KEY>
