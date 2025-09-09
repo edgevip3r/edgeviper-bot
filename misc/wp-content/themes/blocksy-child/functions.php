@@ -10,14 +10,7 @@ add_action( 'wp_enqueue_scripts', function() {
 });
 
 // Discord integration constants
-define('EV_DISCORD_CLIENT_ID',    'NEED_TO_HIDE');
-define('EV_DISCORD_CLIENT_SECRET','NEED_TO_HIDE');
 define('EV_DISCORD_REDIRECT_URI',  home_url('/discord-callback'));
-define('EV_DISCORD_GUILD',        'NEED_TO_HIDE');
-define('EV_DISCORD_ROLE',         'NEED_TO_HIDE');
-define('EV_BOT_API_URL',          'https://edgeviper-bot.onrender.com/discord-role');
-define('EV_BOT_API_KEY',          'NEED_TO_HIDE');
-define('EV_DISCORD_BOT_TOKEN',    'NEED_TO_HIDE');
 
 // ——————————————————————————————
 // TEMP: simulate subscription create via URL
@@ -120,20 +113,19 @@ add_action('init', function(){
   $discord_id = $user['id'] ?? '';
   
 // 2.5) Invite user into the guild *and* assign the Viper role
-$response = wp_remote_request(
-  "https://discord.com/api/guilds/".EV_DISCORD_GUILD."/members/{$discord_id}",
-  [
-    'method'  => 'PUT',
-    'headers' => [
-      'Authorization' => 'Bot ' . EV_DISCORD_BOT_TOKEN,
-      'Content-Type'  => 'application/json',
-    ],
-    'body'    => wp_json_encode([
-      'access_token' => $data['access_token'],
-      'roles'        => [ EV_DISCORD_ROLE ],
-    ]),
-  ]
-);
+$response = wp_remote_post( EV_BOT_API_URL, [
+  'headers' => [
+    'Authorization' => 'Bearer ' . EV_BOT_API_KEY,
+    'Content-Type'  => 'application/json',
+  ],
+  'body' => wp_json_encode([
+    'action'       => 'invite_and_role',     // see Step 4 (bot update)
+    'discord_id'   => $discord_id,
+    'guild_id'     => EV_DISCORD_GUILD,
+    'role_id'      => EV_DISCORD_ROLE,
+    'access_token' => $data['access_token'], // short-lived user token from OAuth exchange
+  ]),
+]);
 
 // Debug: log full response code & body if it fails
 $response_code = wp_remote_retrieve_response_code($response);
