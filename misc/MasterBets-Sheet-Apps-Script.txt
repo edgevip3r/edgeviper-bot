@@ -1,0 +1,25 @@
+/**
+ * onEdit trigger for MasterBets:
+ * Whenever you enter something in col A (date) on row ≥ 3,
+ * and col W is empty, assign the next numeric Bet ID in col W.
+ */
+function onEdit(e) {
+  const sh = e.range.getSheet();
+  if (sh.getName() !== 'MasterBets') return;
+
+  const row = e.range.getRow();
+  const col = e.range.getColumn();
+  if (col !== 1 || row < 3) return;              // only col A, rows ≥ 3
+
+  const idCell = sh.getRange(row, 23);           // col W is index 23
+  if (idCell.getValue() !== '') return;          // already has an ID
+
+  // Gather all existing numeric IDs in W3:W
+  const lastRow = sh.getLastRow();
+  const rawIds  = sh.getRange(3, 23, lastRow - 2, 1)
+                   .getValues().flat()
+                   .filter(v => typeof v === 'number');
+  const nextId  = rawIds.length ? Math.max(...rawIds) + 1 : 1;
+
+  idCell.setValue(nextId);
+}

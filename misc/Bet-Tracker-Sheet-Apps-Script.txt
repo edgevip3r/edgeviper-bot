@@ -1,0 +1,106 @@
+/**
+ * Google Apps Script: Copy new bets from personal "Bet Tracker" sheet into MasterBets
+ */
+function copytoEdgeViper(e) {
+  const sh       = e.range.getSheet();
+  const col      = e.range.getColumn();
+  const row      = e.range.getRow();
+  const newValue = e.range.getValue();
+
+  // only run when someone types "Y" in column M (13) on Bet Tracker OR VN
+  if (
+    !["Bet Tracker","VN"].includes(sh.getName()) ||
+    col  !== 13 ||
+    newValue !== "Y"
+  ) return;
+
+  // pull the entire source row
+  const data = sh.getRange(row, 1, 1, sh.getLastColumn()).getValues()[0];
+
+  // generate a unique magic ID
+  const magicId = Utilities.getUuid();
+  // store it in Bet Tracker column Z (26)
+  sh.getRange(row, 26).setValue(magicId);
+
+  // build the output array: A, C, D, E, F, G, H, I, L → target cols A–I in MasterBets
+  const out = [
+    data[0],   // A → target A
+    data[2],   // C → target B
+    data[3],   // D → target C
+    data[4],   // E → target D
+    data[5],   // F → target E
+    data[6],   // G → target F
+    data[7],   // H → target G
+    data[8],   // I → target H
+    data[11]   // L → target I
+  ];
+
+  // open MasterBets sheet by ID
+  const dest = SpreadsheetApp
+    .openById("HIDDEN_FOR_SECURITY")
+    .getSheetByName("MasterBets");
+
+  // find the first truly blank row in column A
+  const colA = dest.getRange("A:A").getValues();
+  let writeRow = colA.findIndex(r => r[0] === "") + 1;
+  if (writeRow === 0) {
+    writeRow = dest.getLastRow() + 1;
+  }
+
+  // write the 9-column out array into MasterBets A–I
+  dest.getRange(writeRow, 1, 1, out.length).setValues([out]);
+
+  // write the magicId into column V (22)
+  dest.getRange(writeRow, 22).setValue(magicId);
+
+  // ── NEW: assign a sequential Bet ID into column W (23) ──
+  const lastRow = dest.getLastRow();
+  let nextId;
+  if (lastRow >= 3) {
+    // pull W3:W<lastRow>
+    const existing = dest
+      .getRange(3, 23, lastRow - 2, 1)
+      .getValues()
+      .flat()
+      .filter(v => typeof v === 'number');
+    nextId = existing.length ? Math.max(...existing) + 1 : 1;
+  } else {
+    nextId = 1;
+  }
+  dest.getRange(writeRow, 23).setValue(nextId);
+
+  // ── NEW: pull Bookie URL from personal sheet column N and write to MasterBets column X (24) ──
+  const bookieUrl = data[13] || '';
+  dest.getRange(writeRow, 24).setValue(bookieUrl);
+}
+
+/**
+ * When status changes in Bet Tracker, sync back to MasterBets via magicId
+ */
+function syncStatusToMasterBets(e) {
+  // only run on real edits
+  if (!e || !e.range) return;
+
+  const sh = e.range.getSheet();
+  // only watch Bet Tracker sheet
+  if (sh.getName() !== "Bet Tracker") return;
+  // only when the status column L (12) changes
+  if (e.range.columnStart !== 12) return;
+
+  // grab the new status and the magicId from Z (26)
+  const row       = e.range.getRow();
+  const newStatus = sh.getRange(row, 12).getValue();
+  const magicId   = sh.getRange(row, 26).getValue();
+  if (!magicId) return;
+
+  // open MasterBets and find that ID in column V (22)
+  const dest = SpreadsheetApp
+                 .openById("HIDDEN_FOR_SECURITY")
+                 .getSheetByName("MasterBets");
+  const ids  = dest.getRange("V2:V" + dest.getLastRow()).getValues().flat();
+  const idx  = ids.indexOf(magicId);
+  if (idx === -1) return;
+
+  // write the new status into column I (9) of that row
+  dest.getRange(idx + 2, 9).setValue(newStatus);
+}

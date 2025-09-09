@@ -1,0 +1,638 @@
+#header [data-row*=middle] {
+  /* horizontal-offset | vertical-offset | blur-radius | spread-radius | color */
+  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.3);
+}
+
+.site-main {
+	margin-top: 20px;
+}
+
+/* START OF LOGO */
+
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700&display=swap');
+
+.site-title {
+	font-family: 'League Spartan', sans-serif;
+}
+.site-description {
+	font-family: 'Roboto', sans-serif;
+}
+
+.site-branding {
+  padding: 8px 0;
+  box-sizing: border-box;
+}
+
+.site-logo-container {
+  display: flex;
+  align-items: center;
+	height: 90px !important;
+}
+
+/* END OF LOGO */
+
+/* Success styling */
+.mp-success {
+  background-color: #def4c5;
+  border: 1px solid #4d8c2e;
+  padding: 5px 5px 5px 10px;
+  margin-bottom: 15px;
+}
+
+.gs-box.green_type {
+    color: #3c763d;
+    background-color: #dff0d8;
+    border-color: #cae6be;
+}
+.gs-box {
+    padding: 20px;
+    border-left: 5px solid transparent;
+    margin-bottom: 0px;
+}
+
+.connect-disc {
+    margin-bottom: 1em;
+    padding: 10px;
+    background-color: #f6faf3;
+    border: 1px solid #dee6da;
+}
+
+.mepr_error a,
+.mepr_error a:hover {
+	color: red !important;
+}
+
+.mepr-nav-item  a {
+	color: #333 !important;
+	font-weight: 600;
+}
+.mepr-nav-item  a:hover {
+	color: #6bb707 !important;
+	font-weight: 600;
+}
+.mepr-active-nav-tab a {
+	color: #6bb707 !important;
+	font-weight: 600 !important;
+}
+
+.mepr-submit-button,
+.mepr-submit,
+.esaf-submit,
+.esaf-form-button-row button {
+	border-radius: 5px;
+	background-color: #74c907 !important;
+}
+.mepr-submit-button:hover,
+.mepr-submit:hover,
+.esaf-submit:hover,
+.esaf-form-button-row button:hover {
+	background-color: #6bb707 !important;
+}
+
+.esaf-submit,
+.esaf-form-button-row button {
+	padding: 12px;
+	color: #FFF;
+	text-transform: uppercase;
+	font-weight: 700;
+	font-family: 'Roboto', 'Arial';
+}
+
+.ct-footer-copyright  a {
+	color: #6bb707;
+}
+.ct-footer-copyright  a:hover {
+	color: #74c907;
+}
+
+.ev-bet-settings-form select,
+.ev-bet-settings-form input,
+.fluentform input,
+.fluentform textarea {
+	border-color: #CCC !important;
+}
+.mp_wrapper table.mepr-account-table th {
+	font-size: 14px;
+	font-weight: 700;
+	text-align: left;
+	text-transform: none;
+}
+
+.mp_wrapper table.mepr-account-table th,
+.mp_wrapper table.mepr-account-table td {
+	border-color: #CCC !important;
+}
+
+p.kellyroip,
+p.flatroip,
+p.stwroip {
+	font-weight: bold;
+	color: #3c763d;
+	font-size: 20px;
+}
+
+.ff-message-success {
+	background-color: #def4c5;
+	border: 1px solid #4d8c2e;
+	padding: 5px 5px 5px 10px;
+}
+.ff-message-success p {
+	margin-bottom: auto;
+}
+
+@media (max-width: 689px) {
+	p.kellyroip,
+	p.flatroip,
+	p.stwroip {
+		text-align: center;
+	}
+  #gspb_container-id-gsbp-0d6c262.gspb_container {
+   row-gap: 0px;
+    }
+    #gspb_button-id-gsbp-c9d4821 {
+        margin-top: 20px;
+    }
+	.n2-section-smartslider .n2-ss-margin {
+	   margin-top: 0px !important;
+	}
+	.n2-ss-slider .n2-ss-layer-content .n2-ss-layer--auto:not([data-pm=absolute]),
+	div#n2-ss-3 .n2-ss-button-container.n2-ss-nowrap,
+	div#n2-ss-3 .n2-style-e64b4d50dbeb54b0bade8319b1420d0c-heading {
+			width: 100% !important;
+	}
+	a.cta-banner-btn {
+		width: 100%;
+		padding-left: 0px !important;
+		padding-right: 0px !important;
+	}
+}
+
+/* Home ROI box */
+.gspb_text-id-gsbp-ca416d8 {
+    color: #333 !important;
+}
+
+/* Unnecessary? */
+.wpDataTablesWrapper table.dataTable {
+	/* table-layout: auto !important; */
+	/* width: auto !important; */	
+}
+.wpDataTablesWrapper {
+	/* display: inline-block; */
+}
+/* Unnecessary? */
+
+
+/* Historical results */
+
+#table_1_wrapper { display: inline-block; width: 100%; }
+#table_1 { table-layout: auto !important; width: 100%; }
+
+#table_1 th,
+#table_1 td {
+  /* include padding inside each cell’s width */
+  box-sizing:     border-box !important;
+  padding:        3px 10px    !important;
+  /* allow long text or numbers to wrap */
+  white-space:    normal      !important;
+  word-wrap:      break-word  !important;
+  /* overflow-wrap:  anywhere    !important; */
+}
+
+@media (max-width: 555px) {
+  #table_1_wrapper {
+    display: block;
+    width: 100%;
+  }
+  #table_1 {
+    /* force table to fill the wrapper and distribute columns evenly */
+    table-layout: fixed !important;
+    width:        100%       !important;
+    box-sizing:   border-box !important;
+  }
+  #table_1 td,
+  #table_1 th {
+    font-size: 11px;
+	padding: 3px;
+  }
+  #table_1 th.column-wl,
+  #table_1 td.column-wl {
+	width: 55px !important;
+  }
+  #table_1 th.column-odds,
+  #table_1 td.column-odds {
+	width: 58px !important;
+  }
+}
+
+/* ###################################### */
+
+/* My Bets START */
+
+#ev-bets-table_wrapper {
+  display: inline-block !important;
+  width: 100%;
+}
+
+#ev-bets-table {
+  table-layout: auto !important;
+  /* width: auto !important; */
+  margin-bottom: 8px;
+}
+
+#ev-bets-table td,
+#ev-bets-table th {
+  /* include padding inside each cell’s width */
+  box-sizing:     border-box !important;
+  padding:        3px 10px    !important;
+  /* allow long text or numbers to wrap */
+  white-space:    normal      !important;
+  word-wrap:      break-word  !important;
+  /* overflow-wrap:  anywhere    !important; */
+  font-size: 14px;
+}
+
+#ev-bets-table th {
+	color: #333;
+	border-color: #CCC;
+}
+#ev-bets-table td {
+	border-color: #e0e0e0;
+}
+
+@media (max-width: 555px) {
+  #ev-bets-table_wrapper.dataTables_wrapper {
+    display: block;
+    width: 100%;
+    /* remove any horizontal scroll */
+    overflow-x: hidden;
+  }
+  #ev-bets-table.dataTable {
+    /* force table to fill the wrapper and distribute columns evenly */
+    table-layout: fixed !important;
+    width:        100%       !important;
+    box-sizing:   border-box !important;
+  }
+  #ev-bets-table td,
+  #ev-bets-table th {
+    font-size: 11px;
+	padding: 3px;
+  }
+  #ev-bets-table th.column-id,
+  #ev-bets-table td.column-id {
+    width: 58px !important;
+  }
+  #ev-bets-table th.column-wl,
+  #ev-bets-table td.column-wl {
+    width: 41px !important;
+  }
+  #ev-bets-table th.column-odds,
+  #ev-bets-table td.column-odds {
+    width: 48px !important;
+  }
+}
+
+/* show a + before the ID cell when rows are collapsed */
+#ev-bets-table.dtr-inline.collapsed > tbody > tr > td:first-child::before {
+  content: '+';
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 1rem;
+}
+/* hide the default arrow styling */
+#ev-bets-table.dtr-inline > tbody > tr > td:first-child::after {
+  display: none;
+}
+
+#ev-bets-table_length {
+	margin-bottom: 10px;
+}
+
+/* Prevent the ID + “+” from breaking onto two lines */
+#ev-bets-table.dtr-inline.collapsed tbody tr td:first-child {
+  white-space: nowrap !important;
+}
+
+/* Hide sorting */
+#ev-bets-table.no-sort-ui thead th {
+  pointer-events: none !important;
+  cursor: default !important;
+}
+#ev-bets-table.no-sort-ui thead th.sorting:after,
+#ev-bets-table.no-sort-ui thead th.sorting_asc:after,
+#ev-bets-table.no-sort-ui thead th.sorting_desc:after,
+#ev-bets-table.no-sort-ui thead th.sorting:before,
+#ev-bets-table.no-sort-ui thead th.sorting_asc:before,
+#ev-bets-table.no-sort-ui thead th.sorting_desc:before,
+table.dataTable thead>tr>th.sorting:before {
+  display: none !important;
+}
+
+/* Keep the “Show [select] entries” on one line */
+#ev-bets-table_length,
+#ev-bets-table_length label {
+  display: inline-flex !important;
+  align-items: center;
+  white-space: nowrap !important;
+}
+
+/* Give a little breathing room around the dropdown */
+#ev-bets-table_length select {
+  margin: 0 0.5em;
+  display: inline-block !important;
+  min-width: 4em !important;
+  padding: 0.25em 1.5em 0.25em 0.5em !important;
+  background-position: right 0.5em center !important;
+  background-repeat: no-repeat !important;
+  appearance: none !important;
+  -webkit-appearance: menulist-button !important;
+	background-image: none;
+	height: 37px;
+}
+
+.dataTables_wrapper .dataTables_info,
+.wpDataTablesWrapper .dataTables_info {
+	font-size: 12px !important;
+}
+
+.dataTables_wrapper .dataTables_paginate {
+	font-size: 13pxl
+}
+
+/* ###################################### */
+
+/* Backtest widget container */
+.backtest-widget {
+  background-color: #ECE8DF;
+	color: #4B4737;
+  border-radius: 5px;
+  padding: 1em;
+  margin-bottom: 1em;
+  box-sizing: border-box;
+}
+#backtest-stats {
+  background-color: #f6faf3;
+	border: 1px solid #dee6da;
+	color: #333;
+  border-radius: 5px;
+  padding: 1em;
+  margin-bottom: 1em;
+  box-sizing: border-box;
+}
+#backtest-form label {
+	font-size: 16px;
+	color: #333;
+}
+#backtest-form input[type="radio"] {
+	width: 16px;
+	height: 16px;
+}
+
+.backtest-widget input, .backtest-widget input:focus {
+	background-color: #FFF;
+	color: #333;
+}
+
+/* Two‐column layout on desktop, stacked on smaller screens */
+.backtest-row {
+  display: flex;
+  gap: 3px;
+  align-items: flex-start;
+}
+.backtest-row > .backtest-controls,
+.backtest-row > .backtest-chart {
+  flex: 1 1 0;
+}
+
+/* Force the chart container to 200px tall always */
+.backtest-row > .backtest-chart {
+  position: relative !important;
+  height: 200px !important;
+  min-height: 200px !important;
+	margin-left: 16px;
+}
+
+/* Make the canvas fill its container */
+.backtest-row > .backtest-chart canvas {
+  position: relative !important;
+  width: 100%     !important;
+  height: 100%    !important;
+  background-color: #fff;
+  padding: 1em;
+  border-radius: 5px;
+  box-sizing: border-box;
+}
+
+/* Register page if registered */
+.ev-already-member {
+  padding: 1em;
+  border: 1px solid #ddd;
+  background: #f9f9f9;
+  margin-bottom: 1.5em;
+  font-size: 1rem;
+}
+.ev-already-member a {
+  color: #0073aa;
+}
+/* END */
+
+.sp-easy-accordion .sp-ea-single .ea-header a {
+	font-size: 16px !important;
+	line-height: 1.65em !important;
+}
+div[id^=gspb_col-id] {
+    padding: 15px 0px !important;
+}
+
+/* Stack vertically on tablet & mobile */
+@media (max-width: 1065px) {
+  .backtest-row {
+    flex-direction: column;
+    align-items: stretch;   /* make children fill the width */
+  }
+  .backtest-row > .backtest-controls,
+  .backtest-row > .backtest-chart {
+    width: 100% !important;
+    min-width: auto !important;
+  }
+  .backtest-row > .backtest-chart {
+    height: 200px !important;
+    min-height: 200px !important;
+		margin-left: 0px;
+  }
+.site-logo-container {
+	height: 80px !important;
+}
+}
+
+/* Stack the radios and inputs */
+.backtest-widget .mode-select {
+  margin-bottom: 0.5em;
+}
+
+/* Hide both input groups by default */
+.backtest-widget .inputs span {
+  display: none;
+}
+
+/* Show only the active group */
+.backtest-widget.kelly-active .inputs #kelly-group,
+.backtest-widget.flat-active  .inputs #flat-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+}
+
+/* Slim, fixed-width number inputs */
+.backtest-widget input[type="number"] {
+  width: 6em;
+  height: 1.8em;
+  line-height: 1.8em;
+  padding: 0 0.4em;
+  font-size: 0.9em;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.responsiveExpander::before {
+  content: '+';
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  margin-right: 4px;
+}
+
+.wpdt-c .responsiveExpander {
+	float: none !important;
+}
+
+/* Historical row collapsable section */
+.row-detail td ul {
+	padding-bottom: 10px;
+	padding-left: 20px;
+}
+
+.entry-content {
+	margin-top: 10px;
+}
+
+.paginate_button {
+	height: 37px;
+}
+
+.dataTables_wrapper .dataTables_length {
+    float: right !important;
+}
+
+.useful-links-footer {
+	font-size: 15px;
+}
+.useful-links-footer a {
+	color: #6bb707;
+}
+.useful-links-footer a:hover {
+	color: #74c907;
+}
+
+.have-coupon-link {
+	display: block;
+	padding: 10px;
+	background-color: #f6faf3;
+	border: 1px solid #dee6da;
+	margin: 25px 0px 15px;
+	border-radius: 5px;
+}
+
+.mepr-payment-methods-wrapper {
+	margin: 20px 0px 25px;
+	padding: 12px;
+	background-color: var(--theme-palette-color-6);
+	border: 1px solid #e6e7e7;
+}
+
+.mp-form-row.mepr_price {
+	margin-bottom: 20px !important;
+	padding: 12px !important;
+}
+
+@media (max-width: 1024px) {
+	table.has-columns-hidden>tbody>tr>td>span.responsiveExpander {
+		border: none !important;
+		opacity: 1 !important;
+		background-image: none !important;
+		background-color: transparent !important;
+		display: inline !important;
+		line-height: 19px !important;
+		font-size: 12px !important;
+		padding: 0px !important;
+	}
+	table.has-columns-hidden>tbody>tr>td>span.responsiveExpander::before {
+  content: '+';
+  width: 1em;
+  margin-right: 4px;
+	cursor: pointer;
+	font-size: 12px;
+		font-family: inherit !important;
+		display: inline !important;
+	}
+	table.has-columns-hidden>tbody>tr>td>span.responsiveExpander::after {
+		background-image: none !important;
+		display: none !important;
+	}
+  #ev-bets-table {
+	  font-size: 12px;
+  }
+}
+
+@media (min-width: 1025px) {
+	.wpDataTable span.responsiveExpander {
+		display: none !important;
+	}
+}
+
+@media (max-width: 1024px) {
+  /* stack stats over chart */
+  .ev-stats-wrapper {
+    flex-direction: column !important;
+  }
+
+  /* force all four KPI boxes into one row */
+  .ev-stats-wrapper .ev-kpi-container {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+
+  /* make the chart take a full row below */
+  .ev-stats-wrapper .ev-chart-container {
+    width: 100% !important;
+    margin-top: 1rem !important;
+  }
+  .wpDataTablesWrapper.wpdt-pagination-right .dataTables_paginate  {
+    float: none !important;
+    text-align: center;
+  }
+  .wpDataTablesWrapper .dataTables_info {
+	float: none !important;
+	text-align: center;
+  }
+}
+
+@media (max-width: 555px) {
+  .ev-stats-wrapper .ev-kpi-container {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+	.mepr-submit {
+		width: 100%;
+	}
+}
+
+.mp-form-row.mepr_price {
+	padding: 7px;
+	background-color: #ECE8DF;
+	color: #4B4737;
+	border-radius: 5px;
+}
+.mepr_price {
+	font-size: 16px;
+	font-weight: bold;
+}

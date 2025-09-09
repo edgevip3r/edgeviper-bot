@@ -1,0 +1,251 @@
+<div class="backtest-row">
+  <div class="backtest-controls">
+    <form id="backtest-form" class="backtest-widget" style="margin-bottom:1em;">
+      <div class="mode-select">
+        <label><input type="radio" name="mode" value="stw"> Stake to Win (STW)</label>
+        <label><input type="radio" name="mode" value="flat" checked> Flat Stake</label>
+        <label><input type="radio" name="mode" value="kelly"> Kelly Stake</label>
+      </div>
+      <div class="inputs">
+        <span id="kelly-group">
+          <label>Kelly Bankroll: £
+            <input name="bankroll_kelly" type="number" value="1000" step="0.01">
+          </label>
+          <label>% Kelly:
+            <input name="kelly" type="number" value="10" step="1">
+          </label>
+        </span>
+        <span id="flat-group" style="display:none">
+          <label>Flat Bankroll: £
+            <input name="bankroll_flat" type="number" value="1000" step="0.01">
+          </label>
+          <label>Flat Stake: £
+            <input name="flat" type="number" value="10" step="0.01">
+          </label>
+        </span>
+        <span id="stw-group" style="display:none">
+          <label>Stake-to-Win Bankroll: £
+            <input name="bankroll_stw" type="number" value="1000" step="0.01">
+          </label>
+          <label>STW: £
+            <input name="stw" type="number" value="50" step="0.01">
+          </label>
+        </span>
+      </div>
+    </form>
+
+    <div id="backtest-stats" style="margin-bottom:1em;"></div>
+  </div>
+
+  <!-- Profit/Loss Chart -->
+  <div class="backtest-chart" style="margin-bottom:1em;">
+    <canvas id="pnl-chart" height="200"></canvas>
+  </div>
+</div>
+
+[wpdatatable id=5]
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function(){
+  function bootstrap(){
+    if (typeof window.jQuery==='undefined' || typeof jQuery.fn.DataTable!=='function') {
+      return setTimeout(bootstrap,100);
+    }
+    const $       = window.jQuery;
+
+const dt = $('#table_1').DataTable({
+  retrieve: true
+});
+
+    // Strip "(ARB)" markers from any cell for clean display on Results table
+    function stripArbMarkers(){
+      const $body = $(dt.table().body());
+      $body.find('td').each(function(){
+        const t = this.textContent;
+        if (t && t.indexOf('(ARB)') !== -1){
+          this.textContent = t.replace(/\s*\(ARB\)\s*/g, ' ').replace(/\s{2,}/g,' ').trim();
+        }
+      });
+    }
+    dt.on('draw.dt', stripArbMarkers);
+    // Run once after initial load
+    setTimeout(stripArbMarkers, 0);
+
+    // UI elements
+    const $form    = $('#backtest-form');
+    const $kelly   = $('#kelly-group');
+    const $flat    = $('#flat-group');
+    const $stw     = $('#stw-group');
+    const $stats   = $('#backtest-stats');
+
+    // Chart.js setup
+    const ctx = document.getElementById('pnl-chart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels:[], datasets:[{
+        label:'Cumulative P/L',
+        data:[], fill:false,
+        borderColor:'#A3BF69',
+        borderWidth:2, tension:0.4,
+        pointRadius:0
+      }]},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        scales:{ x:{display:false}, y:{ticks:{callback:v=>'£'+v}} },
+        interaction:{mode:'index',intersect:false},
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{
+            title: items => `Bet #${items[0].label}`,
+            label: context => `P/L: £${context.formattedValue}`
+          }}
+        }
+      }
+    });
+
+    // column indexes (0-based) from Filtered-to-Web sheet
+    const ID_COL    = 22,
+          ODDS_COL  = 6,
+          PROB_COL  = 20,
+          WL_COL    = 8,
+          STAKE_COL = 10,
+          PL_COL    = 11,
+          BANK_COL  = 19,
+          FLAG_COL  = 12; // Column M flag: 'D' double, 'T' treble
+
+    function toggleInputs(){
+      const mode = $form.find('[name=mode]:checked').val();
+      $kelly.hide(); $flat.hide(); $stw.hide();
+      if (mode==='kelly')   $kelly.show();
+      else if (mode==='flat') $flat.show();
+      else if (mode==='stw')  $stw.show();
+    }
+
+    function updateTable(){
+      const mode     = $form.find('[name=mode]:checked').val();
+      const initBank = mode==='flat'
+        ? parseFloat($form.find('[name=bankroll_flat]').val())||0
+        : mode==='kelly'
+          ? parseFloat($form.find('[name=bankroll_kelly]').val())||0
+          : parseFloat($form.find('[name=bankroll_stw]').val())||0;
+      const kellyPct = Math.min((parseFloat($form.find('[name=kelly]').val())||0)/100,1);
+      const flatSt   = parseFloat($form.find('[name=flat]').val())||0;
+      const stwAmt   = parseFloat($form.find('[name=stw]').val())||0;
+
+      // sort row indexes by numeric bet ID ascending
+      const idxs = dt.rows().indexes().toArray().sort((a,b)=>{
+        const aId = parseInt(dt.row(a).data()[ID_COL].replace(/,/g,''),10)||0;
+        const bId = parseInt(dt.row(b).data()[ID_COL].replace(/,/g,''),10)||0;
+        return aId - bId;
+      });
+
+      let currentBank = initBank;
+      idxs.forEach(r=>{
+        const d    = dt.row(r).data();
+        const odds = parseFloat(d[ODDS_COL])||0;
+        let   prob = parseFloat(d[PROB_COL])||0;
+        if (prob>1) prob /= 100;
+
+        // adjust odds for double/treble flags in column M
+        let effOdds = odds;
+        const flag = d[FLAG_COL];
+        if(flag==='D'){
+          effOdds = ((odds - 1)/2) + 1;
+        } else if(flag==='T'){
+          effOdds = ((odds - 1)/3) + 1;
+        }
+
+        // staking logic using effOdds for Kelly and STW
+        let stake;
+        if (mode==='flat') {
+          stake = flatSt;
+        } else if (mode==='kelly') {
+          stake = Math.floor(((effOdds * prob - 1) / (effOdds - 1)) * currentBank * kellyPct);
+        } else {
+          const raw = stwAmt/(effOdds - 1) || 0;
+          stake = Math.round(raw);
+          if (stake * (effOdds - 1) < stwAmt) stake += 1;
+        }
+
+        // profit/loss uses original odds
+        let profit = 0;
+        if (d[WL_COL] === 'W') profit = stake*(odds - 1);
+        if (d[WL_COL] === 'L') profit = -stake;
+
+        // write back
+        dt.cell(r, STAKE_COL).data(stake.toFixed(2));
+        dt.cell(r, PL_COL).data(profit.toFixed(2));
+        currentBank += profit;
+        dt.cell(r, BANK_COL).data(currentBank.toFixed(2));
+      });
+
+      dt.draw(false);
+    }
+
+    function updateStats(){
+      let totalStake=0, totalProfit=0;
+      dt.rows().every(function(){
+        const d = this.data();
+        const st = parseFloat(d[STAKE_COL])||0;
+        const pr = parseFloat(d[PL_COL])||0;
+        if (d[WL_COL]==='W' || d[WL_COL]==='L'){
+          totalStake  += st;
+          totalProfit += pr;
+        }
+      });
+
+      const mode = $form.find('[name=mode]:checked').val();
+      const bankroll = mode==='flat'
+        ? parseFloat($form.find('[name=bankroll_flat]').val())||0
+        : mode==='kelly'
+          ? parseFloat($form.find('[name=bankroll_kelly]').val())||0
+          : parseFloat($form.find('[name=bankroll_stw]').val())||0;
+
+      const overallROI = totalStake>0
+        ? ((totalProfit/totalStake)*100).toFixed(2)+'%' : '0%';
+      const totalStaked = '£'+totalStake.toFixed(2);
+      const growth      = bankroll>0
+        ? (((bankroll+totalProfit)/bankroll)*100).toFixed(2)+'%' : '0%';
+      const profitStr   = '£'+totalProfit.toFixed(2);
+
+      $stats.html(
+        `Overall ROI: <strong>${overallROI}</strong> | `+
+        `Total Staked: <strong>${totalStaked}</strong> | `+
+        `Bankroll Growth: <strong>${growth}</strong> | `+
+        `Total Profit: <strong>${profitStr}</strong>`
+      );
+    }
+
+    function updateChart(){
+      const idxs = dt.rows().indexes().toArray().sort((a,b)=>{
+        const aId = parseInt(dt.row(a).data()[ID_COL].replace(/,/g,''),10)||0;
+        const bId = parseInt(dt.row(b).data()[ID_COL].replace(/,/g,''),10)||0;
+        return aId - bId;
+      });
+
+      let cum=0, labels=[], dataPts=[];
+      idxs.forEach(r=>{
+        const d = dt.row(r).data();
+        cum += parseFloat(d[PL_COL])||0;
+        labels.push(d[ID_COL]);
+        dataPts.push(cum.toFixed(2));
+      });
+
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = dataPts;
+      chart.update();
+    }
+
+    function runAll(){
+      toggleInputs(); updateTable(); updateStats(); updateChart();
+    }
+
+    $form.on('input change','input', runAll);
+    dt.on('draw.dt', ()=>{ updateStats(); updateChart(); });
+
+    toggleInputs(); runAll();
+  }
+  bootstrap();
+})();
+</script>
