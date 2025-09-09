@@ -59,20 +59,67 @@ app.get('/api/user-stakes', async (req, res) => {
 });
 
 /**
- * Endpoint: Discord role sync
+ * Endpoint: Discord role sync (add/remove) + invite-and-role
+ * Auth: Authorization: Bearer <BOT_WEBHOOK_KEY>
  */
 app.post('/discord-role', async (req, res) => {
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '');
-  if (token !== WEBHOOK_KEY) return res.status(401).send('Unauthorized');
-  const { action, discord_id, role_id, guild_id } = req.body;
-  if (!action || !discord_id || !role_id || !guild_id) return res.status(400).send('Missing fields');
   try {
-    const guild  = await client.guilds.fetch(guild_id);
-    const member = await guild.members.fetch(discord_id);
-    if (action === 'add_role') await member.roles.add(role_id);
-    else if (action === 'remove_role') await member.roles.remove(role_id);
-    else return res.status(400).send('Invalid action');
-    return res.sendStatus(200);
+    // --- Auth check ---
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '');
+    if (token !== WEBHOOK_KEY) return res.status(401).send('Unauthorized');
+
+    // --- Parse inputs ---
+    const { action, discord_id, role_id, guild_id, access_token } = req.body || {};
+    if (!action || !discord_id || !guild_id) {
+      return res.status(400).send('Missing fields: action, discord_id, guild_id are required');
+    }
+    // role_id is required for all three actions we support
+    if (!role_id) return res.status(400).send('Missing fields: role_id is required');
+
+    // invite_and_role additionally needs the user OAuth access_token (scope: guilds.join)
+    if (action === 'invite_and_role' && !access_token) {
+      return res.status(400).send('Missing fields: access_token is required for invite_and_role');
+    }
+
+    const guild = await client.guilds.fetch(guild_id);
+
+    if (action === 'invite_and_role') {
+      // 1) Try to add the member via OAuth access_token (works if not already a member)
+      try {
+        await guild.members.add(discord_id, {
+          accessToken: access_token,
+          roles: [role_id], // you can include the role during the join
+        });
+        return res.sendStatus(200);
+      } catch (e) {
+        // If they are already a member, or add failed for a recoverable reason, fall back to role add
+        console.warn('invite_and_role: add() failed, attempting role add fallback:', e?.code || e?.status || e?.message || e);
+      }
+
+      // 2) Fallback: fetch existing member and add the role
+      try {
+        const member = await guild.members.fetch(discord_id);
+        await member.roles.add(role_id);
+        return res.sendStatus(200);
+      } catch (e2) {
+        console.error('invite_and_role: fallback role add failed:', e2);
+        return res.status(500).send('Failed to invite and assign role');
+      }
+    }
+
+    if (action === 'add_role') {
+      const member = await guild.members.fetch(discord_id);
+      await member.roles.add(role_id);
+      return res.sendStatus(200);
+    }
+
+    if (action === 'remove_role') {
+      const member = await guild.members.fetch(discord_id);
+      await member.roles.remove(role_id);
+      return res.sendStatus(200);
+    }
+
+    return res.status(400).send('Invalid action');
   } catch (err) {
     console.error('Error in /discord-role:', err);
     return res.status(500).send('Server error');
